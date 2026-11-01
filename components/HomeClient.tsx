@@ -326,6 +326,7 @@ export default function HomeClient({
           alt="Leonida Vice Drive-In Theater"
           fill
           priority
+          unoptimized
           sizes="100vw"
           className="object-fill pointer-events-none select-none"
           draggable={false}
