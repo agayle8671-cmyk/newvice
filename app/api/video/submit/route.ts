@@ -174,6 +174,9 @@ export async function POST(request: NextRequest) {
     const rawUrl = typeof body?.url === "string" ? body.url.trim() : "";
     const cleanTitle = typeof body?.title === "string" ? body.title.trim().replace(/[\u0000-\u001f\u007f<>]/g, "") : "";
     const handle = sanitizeHandle(body?.creatorName);
+    const scoutHandle = body?.scoutName ? sanitizeHandle(body.scoutName) : handle;
+    const rawScoutUserId = typeof body?.scoutUserId === "string" ? body.scoutUserId.trim() : "";
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawScoutUserId);
 
     if (!rawUrl || rawUrl.length > MAX_URL_LENGTH) {
       return NextResponse.json(
@@ -194,7 +197,7 @@ export async function POST(request: NextRequest) {
     if (!isEnglishTitle(cleanTitle)) {
       return NextResponse.json({ ok: false, error: "Clip title must be in English." }, { status: 400 });
     }
-    for (const text of [cleanTitle, handle]) {
+    for (const text of [cleanTitle, handle, scoutHandle]) {
       const verdict = filterMessage(text);
       if (!verdict.allowed) {
         return NextResponse.json({ ok: false, error: `Rejected: ${verdict.reason}` }, { status: 400 });
@@ -267,6 +270,8 @@ export async function POST(request: NextRequest) {
       title: cleanTitle,
       creator_name: handle,
       creator_url: canonicalUrl,
+      scout_name: scoutHandle,
+      scout_user_id: isUuid ? rawScoutUserId : null,
       source_platform: resolved.platform,
       source_category: "user_clip",
       tags: ["user_submission", "gameplay_clip"],

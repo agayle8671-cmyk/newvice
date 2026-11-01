@@ -4,13 +4,28 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth/context";
 import { loadDemoProfile, saveDemoProfile } from "@/lib/profile/guest";
+import {
+  useViceEconomy,
+  updateGarageCosmetics,
+  triggerTowImpoundDemo,
+  type HornMelodyId,
+} from "@/lib/economy/vice-cred";
+import { getDriveInAudioGraph } from "@/lib/audio/DriveInAudioGraph";
 
-// ─── Badge options ────────────────────────────────────────────────────────────
+// ─── Badge options (including V3 Scout / Row A VIP silhouettes) ───────────────
 const BADGE_OPTIONS = [
-  { value: "muscle_car",  label: "🚗 Muscle Car" },
-  { value: "sports_car",  label: "🏎️  Sports Car" },
-  { value: "truck",       label: "🚛 Truck"       },
-  { value: "default",     label: "🚙 Default"     },
+  { value: "muscle_car",  label: "🚗 Muscle Car",    minCred: 0   },
+  { value: "sports_car",  label: "🏎️ Sports Car",   minCred: 0   },
+  { value: "truck",       label: "🚛 Pickup Truck", minCred: 0   },
+  { value: "synth_coupe", label: "⚡ Synth Coupe",  minCred: 50  },
+  { value: "lowrider",    label: "🌴 Lowrider",     minCred: 100 },
+  { value: "vice_pd",     label: "🚓 Vice PD",      minCred: 200 },
+];
+
+const HORN_OPTIONS: { value: HornMelodyId; label: string }[] = [
+  { value: "synth_horn",     label: "🎹 Vice Synth Fifth" },
+  { value: "lowrider_chime", label: "🎶 Lowrider Chime"  },
+  { value: "vice_siren",     label: "🚨 Vice PD Siren"   },
 ];
 
 // ─── Colour presets ───────────────────────────────────────────────────────────
@@ -26,11 +41,14 @@ interface ProfileModalProps {
 
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const { user, profile, refreshProfile } = useAuth();
+  const economy = useViceEconomy();
   const isDemo = !user;
 
   const [username, setUsername]     = useState("");
   const [badge, setBadge]           = useState("muscle_car");
   const [color, setColor]           = useState("#ff007f");
+  const [plate, setPlate]           = useState("VICE-2026");
+  const [horn, setHorn]             = useState<HornMelodyId>("synth_horn");
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
   const [error, setError]           = useState<string | null>(null);
@@ -51,6 +69,8 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         setBadge(profile.vehicle_badge ?? "muscle_car");
         setColor(profile.badge_color ?? "#ff007f");
       }
+      setPlate(economy.licensePlate);
+      setHorn(economy.preferredHorn);
       setSaved(false);
       setError(null);
     }
@@ -67,6 +87,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
     setSaving(true);
     setError(null);
+    updateGarageCosmetics({ licensePlate: plate, preferredHorn: horn });
 
     if (isDemo) {
       // Demo mode — local only
@@ -94,7 +115,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     } finally {
       setSaving(false);
     }
-  }, [username, badge, color, isDemo, user, onClose, refreshProfile]);
+  }, [username, badge, color, plate, horn, isDemo, user, onClose, refreshProfile]);
 
   // Close on Escape
   useEffect(() => {
@@ -142,14 +163,14 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             className="fixed inset-0 z-[201] flex items-center justify-center pointer-events-none"
           >
             <div
-              className="pointer-events-auto relative flex flex-col gap-4"
+              className="pointer-events-auto relative flex flex-col gap-3.5 max-h-[90vh] overflow-y-auto"
               style={{
-                width: "min(420px, 90vw)",
+                width: "min(460px, 92vw)",
                 background: "linear-gradient(145deg, #0a0b24 0%, #0e0f2e 100%)",
                 border: "1px solid rgba(0,243,255,0.3)",
                 boxShadow: "0 0 40px rgba(0,243,255,0.12), 0 0 80px rgba(255,0,127,0.06)",
                 borderRadius: 8,
-                padding: "24px 28px 28px",
+                padding: "20px 24px 24px",
               }}
             >
               {/* Header */}
@@ -162,7 +183,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                     textShadow: "0 0 10px rgba(255,221,0,0.6)",
                   }}
                 >
-                  ⚙ PROFILE SETTINGS
+                  ⚙ DRIVER GARAGE & SCOUT ID
                 </span>
                 <button
                   onClick={onClose}
@@ -176,6 +197,55 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 >
                   ✕
                 </button>
+              </div>
+
+              {/* Vice Cred, Attendance Streak & Row A Tow-Truck Status Card */}
+              <div
+                className="rounded-md p-2.5 flex flex-col gap-1.5"
+                style={{
+                  background: "rgba(5, 6, 20, 0.85)",
+                  border: `1px solid ${economy.rank.color}44`,
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className="font-[family-name:var(--font-display)] font-bold tracking-wider uppercase"
+                    style={{ fontSize: "11px", color: economy.rank.color }}
+                  >
+                    {economy.rank.badge} {economy.rank.title}
+                  </span>
+                  <span
+                    className="font-[family-name:var(--font-chat)] px-2 py-0.5 rounded font-bold"
+                    style={{
+                      fontSize: "10px",
+                      background: "rgba(255,221,0,0.12)",
+                      color: "#ffdd00",
+                      border: "1px solid rgba(255,221,0,0.3)",
+                    }}
+                  >
+                    {economy.viceCred} VICE CRED
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-[family-name:var(--font-chat)] text-white/70">
+                  <span>🔥 Streak: <strong>{economy.streakDays}d</strong> ({economy.rank.qualifiesRowA ? "ROW A VIP UNLOCKED" : `${Math.max(0, 7 - economy.streakDays)}d or ${Math.max(0, 100 - economy.viceCred)} Cred to Row A`})</span>
+                  <span>🎬 Scouted: <strong>{economy.clipsScouted}</strong></span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-[family-name:var(--font-chat)] text-white/50 pt-1 border-t border-white/10">
+                  <span>
+                    🚛 Tow Timer: <strong className="text-[#39ff14]">{economy.hoursUntilTow}h safe</strong> (48h inactivity hauls Row A)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerTowImpoundDemo();
+                      onClose();
+                    }}
+                    className="text-[#ff6b00] hover:underline cursor-pointer"
+                    title="Preview the 48-hour Vice City Tow-Truck Impound alert"
+                  >
+                    Preview Tow ↗
+                  </button>
+                </div>
               </div>
 
               {/* Demo mode notice */}
@@ -246,32 +316,110 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                     textTransform: "uppercase",
                   }}
                 >
-                  Vehicle Badge
+                  Vehicle Silhouette
                 </label>
-                <div className="flex gap-2 flex-wrap">
-                  {BADGE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setBadge(opt.value)}
+                <div className="flex gap-1.5 flex-wrap">
+                  {BADGE_OPTIONS.map((opt) => {
+                    const locked = economy.viceCred < opt.minCred && economy.streakDays < 7;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          if (!locked) setBadge(opt.value);
+                        }}
+                        title={locked ? `Requires ${opt.minCred} Vice Cred or 7-day streak` : opt.label}
+                        style={{
+                          background: badge === opt.value ? "rgba(0,243,255,0.14)" : "#07081a",
+                          border: badge === opt.value
+                            ? "1px solid rgba(0,243,255,0.65)"
+                            : "1px solid rgba(0,243,255,0.15)",
+                          borderRadius: 4,
+                          padding: "5px 10px",
+                          cursor: locked ? "not-allowed" : "pointer",
+                          opacity: locked ? 0.45 : 1,
+                          color: badge === opt.value ? "#00f3ff" : "#ffffff88",
+                          fontFamily: "var(--font-chat)",
+                          fontSize: "clamp(10px,0.85vw,12px)",
+                          transition: "all 0.15s ease",
+                          outline: "none",
+                        }}
+                      >
+                        {opt.label} {locked ? `🔒(${opt.minCred})` : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* License Plate & 3D Spatial Horn */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontSize: "clamp(8px,0.8vw,11px)",
+                      color: "#ffdd00aa",
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    License Plate
+                  </label>
+                  <input
+                    type="text"
+                    value={plate}
+                    onChange={(e) => setPlate(e.target.value.toUpperCase())}
+                    maxLength={9}
+                    placeholder="VICE-2026"
+                    style={{
+                      ...inputBase,
+                      fontFamily: "var(--font-display)",
+                      letterSpacing: "0.12em",
+                      color: "#ffdd00",
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label
                       style={{
-                        background: badge === opt.value ? "rgba(0,243,255,0.12)" : "#07081a",
-                        border: badge === opt.value
-                          ? "1px solid rgba(0,243,255,0.6)"
-                          : "1px solid rgba(0,243,255,0.15)",
-                        borderRadius: 4,
-                        padding: "5px 12px",
-                        cursor: "pointer",
-                        color: badge === opt.value ? "#00f3ff" : "#ffffff66",
-                        fontFamily: "var(--font-chat)",
-                        fontSize: "clamp(10px,0.9vw,13px)",
-                        transition: "all 0.15s ease",
-                        outline: "none",
-                        WebkitTapHighlightColor: "transparent",
+                        fontFamily: "var(--font-display)",
+                        fontSize: "clamp(8px,0.8vw,11px)",
+                        color: "#00f3ffaa",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
                       }}
                     >
-                      {opt.label}
+                      3D Horn
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const g = getDriveInAudioGraph();
+                        g.unlock();
+                        g.setMasterVolume(0.85, false);
+                        g.playSpatialHorn(horn, 0, 0.3);
+                      }}
+                      className="text-[10px] text-[#00f3ff] hover:text-[#ff007f] font-[family-name:var(--font-chat)] cursor-pointer"
+                    >
+                      🔊 Test
                     </button>
-                  ))}
+                  </div>
+                  <select
+                    value={horn}
+                    onChange={(e) => setHorn(e.target.value as HornMelodyId)}
+                    style={{
+                      ...inputBase,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {HORN_OPTIONS.map((h) => (
+                      <option key={h.value} value={h.value} style={{ background: "#07081a" }}>
+                        {h.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

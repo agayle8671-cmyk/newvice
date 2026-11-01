@@ -67,27 +67,48 @@ export default function CreatorCredit({ item, visible }: CreatorCreditProps) {
               />
             )}
 
-            {/* Name + platform */}
+            {/* Name + platform + Dual Scout Attribution */}
             <div className="flex flex-col min-w-0">
-              <span
-                className="font-[family-name:var(--font-display)] font-bold leading-none truncate"
-                style={{
-                  fontSize: "clamp(8px,0.75vw,11px)",
-                  color,
-                  textShadow: `0 0 6px ${color}88`,
-                }}
-              >
-                {item.platformIcon} {item.creatorName}
-              </span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className="font-[family-name:var(--font-display)] font-bold leading-none truncate"
+                  style={{
+                    fontSize: "clamp(8px,0.75vw,11px)",
+                    color,
+                    textShadow: `0 0 6px ${color}88`,
+                  }}
+                >
+                  {item.platformIcon} {item.creatorName}
+                </span>
+                {typeof item.highBeamCount === "number" && item.highBeamCount > 0 && (
+                  <span
+                    className="shrink-0 font-[family-name:var(--font-display)] font-bold px-1 py-0.5 rounded"
+                    style={{
+                      fontSize: "clamp(6px,0.55vw,8px)",
+                      color: "#ffdd00",
+                      background: "rgba(255,221,0,0.12)",
+                      border: "1px solid rgba(255,221,0,0.35)",
+                    }}
+                    title="Crowd High-Beam Flashes"
+                  >
+                    💡 {item.highBeamCount}
+                  </span>
+                )}
+              </div>
               <span
                 className="font-[family-name:var(--font-chat)] leading-none truncate"
                 style={{
                   fontSize: "clamp(7px,0.65vw,9px)",
-                  color: "#ffffff66",
-                  marginTop: 1,
+                  color: "#ffffff88",
+                  marginTop: 2,
                 }}
               >
                 on {item.platform}
+                {item.scoutName ? (
+                  <span style={{ color: "#ff007fdd", marginLeft: 5 }}>
+                    • Scouted by @{item.scoutName}
+                  </span>
+                ) : null}
               </span>
             </div>
 

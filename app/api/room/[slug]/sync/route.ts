@@ -7,6 +7,7 @@ import {
   type CatalogRow,
 } from "@/lib/video/catalog";
 import { getSupabaseReader } from "@/lib/supabase/admin";
+import { getViceNightlyState, scoreClipForBlock } from "@/lib/schedule/vice-nightly";
 
 // ─── Deterministic Server-Clock Room Coordinator ─────────────────────────────
 // Computes CurrentClipOffset = ServerNow() - ClipStartTimestamp deterministically
@@ -73,10 +74,17 @@ async function getActivePlaylist(): Promise<VideoItem[]> {
     });
 
     if (eligible.length > 0) {
-      const items = eligible.map((row) => {
-        const item = rowToVideoItem(row);
-        return { ...item, durationSec: item.durationSec ?? DEFAULT_CLIP_DURATION_SEC };
-      });
+      const { currentBlock } = getViceNightlyState(now);
+      const items = eligible
+        .map((row) => {
+          const item = rowToVideoItem(row);
+          return { ...item, durationSec: item.durationSec ?? DEFAULT_CLIP_DURATION_SEC };
+        })
+        .sort((a, b) => {
+          const scoreDiff = scoreClipForBlock(b, currentBlock) - scoreClipForBlock(a, currentBlock);
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.id.localeCompare(b.id);
+        });
       cachedPlaylist = items;
       cachedAtMs = now;
       return items;

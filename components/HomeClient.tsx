@@ -8,12 +8,23 @@ import { useGuestProfile } from "@/lib/profile/guest";
 import AuthModal from "@/components/auth/AuthModal";
 import ProfileModal from "@/components/profile/ProfileModal";
 import SubmitClipModal from "@/components/drive-in/SubmitClipModal";
+import SpatialParkingLot from "@/components/drive-in/SpatialParkingLot";
+import AmbientLightProjector from "@/components/drive-in/AmbientLightProjector";
+import CarCabinDrawer from "@/components/drive-in/CarCabinDrawer";
+import DashboardTactileBar from "@/components/drive-in/DashboardTactileBar";
 import VideoEngine from "@/components/video-engine/VideoEngine";
 import NowPlaying from "@/components/video-engine/NowPlaying";
 import { filterMessage } from "@/lib/moderation/filter";
 import { useDriveInRoom } from "@/lib/realtime/useDriveInRoom";
+import { useCarCabinVoice } from "@/lib/realtime/cabin-voice";
 import { getDriveInAudioGraph } from "@/lib/audio/DriveInAudioGraph";
+import {
+  useViceEconomy,
+  recordDailyLotCheckIn,
+  awardViceCred,
+} from "@/lib/economy/vice-cred";
 import type { ChatMessage } from "@/lib/realtime/chat";
+import type { VehicleType } from "@/lib/realtime/party-protocol";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 // ─── QWERTY KEY POSITIONS (0..1 within the keyboard canvas area) ─────────────
@@ -76,11 +87,30 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
   const [inputFocused, setInputFocused] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showCabinDrawer, setShowCabinDrawer] = useState(false);
   const [currentVideoItem, setCurrentVideoItem] = useState<import("@/lib/video/types").VideoItem | null>(null);
 
+  // Phase 2 Spatial Lot & Crowd Reaction local visual states
+  const [localHighBeamsOn, setLocalHighBeamsOn] = useState(false);
+  const [localHazardsOn, setLocalHazardsOn] = useState(false);
+  const [activeHornSeatId, setActiveHornSeatId] = useState<string | null>(null);
+  const [encoreSurgeActive, setEncoreSurgeActive] = useState(false);
+  const [empGlitchActive, setEmpGlitchActive] = useState(false);
+
+  const stageRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const flashedClipIdsRef = useRef<Set<string>>(new Set());
+  const highBeamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hornRippleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+
+  const economy = useViceEconomy();
+
+  // Record daily check-in & evaluate 48-hour Tow-Truck impound once on mount
+  useEffect(() => {
+    recordDailyLotCheckIn();
+  }, []);
 
   // Derived auth state — declared here so keyboard glow effects can reference them
   const currentUserId = user ? user.id : guest?.id ?? "guest_pending";
@@ -88,6 +118,13 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
   const currentBadge = profile?.vehicle_badge ?? guest?.vehicle_badge ?? "muscle_car";
   const currentBadgeColor = profile?.badge_color ?? guest?.badge_color ?? "#ff007f";
   const isAuthenticated = !!user;
+
+  // ── Phase 2C: 4-Seat WebRTC Car Crew Cabin + Warm 950 Hz FM Radio DSP ────
+  const cabin = useCarCabinVoice({
+    userId: currentUserId,
+    username: currentUsername,
+    badgeColor: currentBadgeColor,
+  });
 
   const appendUniqueMessage = useCallback((incoming: ChatMessage) => {
     setMessages((prev) => {
@@ -103,10 +140,20 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
     username: currentUsername,
     vehicleType: currentBadge,
     badgeColor: currentBadgeColor,
-    onHornTrigger: (_seatId, hornId, panX, zDepth) => {
-      getDriveInAudioGraph().playSpatialHorn(hornId, panX, zDepth);
+    licensePlate: economy.licensePlate,
+    viceCred: economy.viceCred,
+    streakDays: economy.streakDays,
+    onHornTrigger: (seatId, hornId, panX, zDepth) => {
+      const g = getDriveInAudioGraph();
+      g.unlock();
+      g.playSpatialHorn(hornId, panX, zDepth);
+      setActiveHornSeatId(seatId);
+      if (hornRippleTimerRef.current) clearTimeout(hornRippleTimerRef.current);
+      hornRippleTimerRef.current = setTimeout(() => setActiveHornSeatId(null), 900);
     },
     onEncoreSurge: (bonusSec, highBeams) => {
+      setEncoreSurgeActive(true);
+      setTimeout(() => setEncoreSurgeActive(false), 4500);
       appendUniqueMessage({
         id: `encore_${Date.now()}`,
         userId: "system",
@@ -119,7 +166,11 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
       });
     },
     onClipTransition: (reason, nextClip) => {
+      setLocalHighBeamsOn(false);
+      setLocalHazardsOn(false);
       if (reason === "emp_skip") {
+        setEmpGlitchActive(true);
+        setTimeout(() => setEmpGlitchActive(false), 950);
         appendUniqueMessage({
           id: `emp_${Date.now()}`,
           userId: "system",
@@ -170,7 +221,114 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
     room.syncMode === "partyserver" && room.vehicles.length > 0
       ? room.vehicles.length
       : presenceCount;
-  const anyModalOpen = showAuthModal || showProfileModal || showSubmitModal;
+  const anyModalOpen =
+    showAuthModal || showProfileModal || showSubmitModal || showCabinDrawer;
+
+  // ── Phase 2A/2B/2C Interactive Lot Handlers & Keyboard Shortcuts ────────────
+  const handleToggleHighBeams = useCallback(() => {
+    const nextState = !localHighBeamsOn;
+    setLocalHighBeamsOn(nextState);
+    room.sendFlash(nextState);
+
+    if (highBeamTimerRef.current) clearTimeout(highBeamTimerRef.current);
+    if (nextState) {
+      highBeamTimerRef.current = setTimeout(() => {
+        setLocalHighBeamsOn(false);
+        room.sendFlash(false);
+      }, 5500);
+
+      const activeClipId = currentVideoItem?.id;
+      if (activeClipId && !flashedClipIdsRef.current.has(activeClipId)) {
+        flashedClipIdsRef.current.add(activeClipId);
+        awardViceCred(5, "high_beam");
+        fetch("/api/video/react", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoId: activeClipId, reaction: "high_beam" }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (data?.ok && typeof data.highBeamCount === "number") {
+              setCurrentVideoItem((prev) =>
+                prev && prev.id === activeClipId
+                  ? {
+                      ...prev,
+                      highBeamCount: data.highBeamCount,
+                      viralHeatScore: data.viralHeatScore ?? prev.viralHeatScore,
+                    }
+                  : prev
+              );
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [localHighBeamsOn, room, currentVideoItem?.id]);
+
+  const handleHonkHorn = useCallback(
+    (panX = 0, zDepth = 0.22, seatId?: string) => {
+      const g = getDriveInAudioGraph();
+      g.unlock();
+      g.playSpatialHorn(economy.preferredHorn, panX, zDepth);
+      room.sendHorn(economy.preferredHorn);
+
+      const targetSeat =
+        seatId ?? (economy.rank.qualifiesRowA ? "A-1" : "A-0");
+      setActiveHornSeatId(targetSeat);
+      if (hornRippleTimerRef.current) clearTimeout(hornRippleTimerRef.current);
+      hornRippleTimerRef.current = setTimeout(
+        () => setActiveHornSeatId(null),
+        900
+      );
+    },
+    [economy.preferredHorn, economy.rank.qualifiesRowA, room]
+  );
+
+  const handleToggleHazards = useCallback(() => {
+    const nextState = !localHazardsOn;
+    setLocalHazardsOn(nextState);
+    if (nextState && room.syncMode !== "partyserver") {
+      setEmpGlitchActive(true);
+      setTimeout(() => {
+        setEmpGlitchActive(false);
+        setLocalHazardsOn(false);
+      }, 950);
+    }
+    room.sendHazard(nextState);
+  }, [localHazardsOn, room]);
+
+  // Global hotkeys when chat input & modals are not focused:
+  //   SPACE = Flash High-Beams | H = 3D Horn | X = Hazard Vote Skip | R = FM Cabin Radio
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (anyModalOpen || inputFocused) return;
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        handleToggleHighBeams();
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        handleHonkHorn();
+      } else if (e.key === "x" || e.key === "X") {
+        e.preventDefault();
+        handleToggleHazards();
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        cabin.toggleWindowsUpFm();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    anyModalOpen,
+    inputFocused,
+    handleToggleHighBeams,
+    handleHonkHorn,
+    handleToggleHazards,
+    cabin,
+  ]);
 
   // ── Keyboard glow canvas ────────────────────────────────────────────────────
   const kbCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -391,9 +549,33 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
         isOpen={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
         defaultCreatorName={currentUsername}
-        onClipSubmitted={(clipTitle, creator) => {
-          handleSendMessage(`🎬 New community stunt submitted: "${clipTitle}" by ${creator}! Queued on screen.`);
+        userId={user?.id}
+        onClipSubmitted={(clipTitle, creator, scout) => {
+          const credit =
+            scout && scout !== creator
+              ? `by ${creator} (Scouted by @${scout})`
+              : `by ${creator}`;
+          handleSendMessage(
+            `🎬 New community stunt submitted: "${clipTitle}" ${credit}! Queued on screen.`
+          );
         }}
+      />
+      <CarCabinDrawer
+        isOpen={showCabinDrawer}
+        onClose={() => setShowCabinDrawer(false)}
+        cabinCode={cabin.cabinCode}
+        windowsUpFmMode={cabin.windowsUpFmMode}
+        micEnabled={cabin.micEnabled}
+        micError={cabin.micError}
+        isLocalSpeaking={cabin.isLocalSpeaking}
+        passengers={cabin.passengers}
+        cabinNotes={cabin.cabinNotes}
+        onToggleWindowsUpFm={() => cabin.toggleWindowsUpFm()}
+        onToggleMicrophone={() => void cabin.toggleMicrophone()}
+        onOpenOrJoinCabin={(code) => cabin.openOrJoinCabin(code)}
+        onLeaveCabin={() => cabin.leaveCabin()}
+        onSendCabinNote={(text) => cabin.sendCabinNote(text)}
+        onTestVoiceDuck={() => cabin.triggerVoiceDuck()}
       />
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -403,6 +585,7 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
           maintain full control over child positioning.
       ══════════════════════════════════════════════════════════════════ */}
       <div
+        ref={stageRef}
         className="relative overflow-hidden"
         style={{
           width: "100vw",
@@ -419,6 +602,66 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
           sizes="100vw"
           className="object-fill pointer-events-none select-none"
           draggable={false}
+        />
+
+        {/* ── PHASE 2B: 32×18 Offscreen Ambient Light Wash & Sub-Bass Engine ── */}
+        <AmbientLightProjector
+          stageRef={stageRef}
+          isPlaying={isVideoPlaying}
+          encoreActive={encoreSurgeActive}
+          empGlitchActive={empGlitchActive}
+        />
+
+        {/* ── PHASE 2A: Interactive Multiplayer Spatial Parking Lot ─────────── */}
+        <SpatialParkingLot
+          remoteVehicles={room.vehicles}
+          localDriver={{
+            userId: currentUserId,
+            username: currentUsername,
+            vehicleType: (currentBadge || "muscle_car") as VehicleType,
+            badgeColor: currentBadgeColor,
+            licensePlate: economy.licensePlate,
+            viceCred: economy.viceCred,
+            streakDays: economy.streakDays,
+            highBeamsOn: localHighBeamsOn,
+            hazardsOn: localHazardsOn,
+            cabinUnlocked: cabin.cabinUnlocked,
+            cabinCode: cabin.cabinCode,
+          }}
+          activeHornSeatId={activeHornSeatId}
+          onToggleLocalHighBeams={handleToggleHighBeams}
+          onToggleLocalHazards={handleToggleHazards}
+          onHonkHorn={(panX, zDepth, seatId) =>
+            handleHonkHorn(panX, zDepth, seatId)
+          }
+          onOpenCabinDrawer={(joinCode) => {
+            if (joinCode) cabin.openOrJoinCabin(joinCode);
+            setShowCabinDrawer(true);
+          }}
+        />
+
+        {/* ── PHASE 2C & 2D: Vice Nightly HUD, Tow-Truck Alert & Tactile Bar ── */}
+        <DashboardTactileBar
+          highBeamsOn={localHighBeamsOn}
+          hazardsOn={localHazardsOn}
+          highBeamCount={
+            room.reactionTallies.highBeams +
+            (room.syncMode !== "partyserver" && localHighBeamsOn ? 1 : 0)
+          }
+          hazardCount={
+            room.reactionTallies.hazards +
+            (room.syncMode !== "partyserver" && localHazardsOn ? 1 : 0)
+          }
+          occupiedCount={Math.max(1, room.reactionTallies.occupiedCount || 9)}
+          windowsUpFmMode={cabin.windowsUpFmMode}
+          cabinCode={cabin.cabinCode}
+          economy={economy}
+          onToggleHighBeams={handleToggleHighBeams}
+          onHonkHorn={() => handleHonkHorn()}
+          onToggleHazards={handleToggleHazards}
+          onToggleWindowsUpFm={() => cabin.toggleWindowsUpFm()}
+          onOpenCabinDrawer={() => setShowCabinDrawer(true)}
+          onOpenProfileModal={() => setShowProfileModal(true)}
         />
 
         {/* ═══════════════════════════════════════════════════════════════

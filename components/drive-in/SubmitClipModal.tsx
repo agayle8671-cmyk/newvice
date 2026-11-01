@@ -2,26 +2,42 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { awardViceCred, useViceEconomy } from "@/lib/economy/vice-cred";
 
 interface SubmitClipModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultCreatorName?: string;
-  onClipSubmitted?: (title: string, creator: string) => void;
+  userId?: string;
+  onClipSubmitted?: (title: string, creator: string, scout: string) => void;
 }
 
 export default function SubmitClipModal({
   isOpen,
   onClose,
   defaultCreatorName = "",
+  userId,
   onClipSubmitted,
 }: SubmitClipModalProps) {
+  const economy = useViceEconomy();
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [creatorName, setCreatorName] = useState(defaultCreatorName);
+  const [scoutName, setScoutName] = useState(defaultCreatorName);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
+      if (!creatorName && defaultCreatorName) setCreatorName(defaultCreatorName);
+      if (!scoutName && defaultCreatorName) setScoutName(defaultCreatorName);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +56,9 @@ export default function SubmitClipModal({
       return;
     }
 
+    const finalCreator = creatorName.trim() || defaultCreatorName || "Vice Driver";
+    const finalScout = scoutName.trim() || defaultCreatorName || finalCreator;
+
     setLoading(true);
     try {
       const res = await fetch("/api/video/submit", {
@@ -48,7 +67,9 @@ export default function SubmitClipModal({
         body: JSON.stringify({
           url: cleanUrl,
           title: cleanTitle,
-          creatorName: creatorName.trim() || "Vice Driver",
+          creatorName: finalCreator,
+          scoutName: finalScout,
+          scoutUserId: userId,
         }),
       });
 
@@ -57,9 +78,10 @@ export default function SubmitClipModal({
         throw new Error(data.error || "Failed to submit clip");
       }
 
-      setSuccessMsg(data.message || "Clip queued successfully!");
+      awardViceCred(50, "clip_scouted");
+      setSuccessMsg(`${data.message || "Clip queued!"} (+50 VICE CRED EARNED)`);
       if (onClipSubmitted) {
-        onClipSubmitted(cleanTitle, creatorName.trim() || "Vice Driver");
+        onClipSubmitted(cleanTitle, finalCreator, finalScout);
       }
       setTimeout(() => {
         setUrl("");
@@ -114,8 +136,18 @@ export default function SubmitClipModal({
               </button>
             </div>
 
-            <p className="text-xs text-white/70 mb-5 font-[family-name:var(--font-chat)]">
-              Got an insane stunt, police pursuit, or hilarious fail in GTA VI? Submit your clip URL and watch it broadcast live to everyone parked at the drive-in!
+            <div className="flex items-center justify-between mb-3 bg-[#ffdd00]/10 border border-[#ffdd00]/30 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-[#ffdd00]">
+                <span>{economy.rank.badge}</span>
+                <span>SCOUT RANK: <strong>{economy.rank.title}</strong> ({economy.viceCred} CRED)</span>
+              </div>
+              <span className="text-[10px] font-bold bg-[#ff007f] text-white px-2 py-0.5 rounded uppercase tracking-wider">
+                +50 CRED REWARD
+              </span>
+            </div>
+
+            <p className="text-xs text-white/70 mb-4 font-[family-name:var(--font-chat)]">
+              Got an insane stunt, police pursuit, or hilarious fail in GTA VI? Scout or submit a clip URL to broadcast it live to the lot and earn <strong>Vice Cred</strong> toward Row A VIP parking!
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -151,18 +183,33 @@ export default function SubmitClipModal({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#00f3ff] uppercase tracking-wider mb-1 font-[family-name:var(--font-chat)]">
-                  Driver Handle (Display Name)
-                </label>
-                <input
-                  type="text"
-                  maxLength={30}
-                  placeholder="e.g. SpeedDemon99"
-                  value={creatorName}
-                  onChange={(e) => setCreatorName(e.target.value)}
-                  className="w-full bg-black/60 border border-[#00f3ff]/30 focus:border-[#ff007f] rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none transition-all font-mono"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#00f3ff] uppercase tracking-wider mb-1 font-[family-name:var(--font-chat)]">
+                    Original Creator Handle
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={30}
+                    placeholder="e.g. SpeedDemon99"
+                    value={creatorName}
+                    onChange={(e) => setCreatorName(e.target.value)}
+                    className="w-full bg-black/60 border border-[#00f3ff]/30 focus:border-[#ff007f] rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none transition-all font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#ffdd00] uppercase tracking-wider mb-1 font-[family-name:var(--font-chat)]">
+                    Scouted By (Your Handle)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={30}
+                    placeholder="e.g. ViceScout"
+                    value={scoutName}
+                    onChange={(e) => setScoutName(e.target.value)}
+                    className="w-full bg-black/60 border border-[#ffdd00]/30 focus:border-[#ffdd00] rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none transition-all font-mono"
+                  />
+                </div>
               </div>
 
               {errorMsg && (
