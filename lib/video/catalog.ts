@@ -182,3 +182,57 @@ export function rowToVideoItem(row: CatalogRow): VideoItem {
     playCount: row.play_count ?? 0,
   };
 }
+
+// ─── Admin Live Broadcast Override & Cache Invalidation ──────────────────────
+export interface ForcedBroadcastOverride {
+  videoId: string;
+  startedAtMs: number;
+  expiresAtMs: number;
+}
+
+const GLOBAL_OVERRIDE_KEY = "__lv_forced_broadcast_override__";
+const GLOBAL_REVISION_KEY = "__lv_catalog_revision__";
+
+export function setForcedBroadcastClip(
+  videoId: string | null,
+  durationSec = DEFAULT_CLIP_DURATION_SEC
+): ForcedBroadcastOverride | null {
+  const g = globalThis as Record<string, unknown>;
+  g[GLOBAL_REVISION_KEY] = ((g[GLOBAL_REVISION_KEY] as number) || 0) + 1;
+  if (!videoId) {
+    g[GLOBAL_OVERRIDE_KEY] = null;
+    return null;
+  }
+  const now = Date.now();
+  const safeDurMs = Math.max(20, Math.min(durationSec || DEFAULT_CLIP_DURATION_SEC, 600)) * 1000;
+  const override: ForcedBroadcastOverride = {
+    videoId,
+    startedAtMs: now,
+    expiresAtMs: now + safeDurMs,
+  };
+  g[GLOBAL_OVERRIDE_KEY] = override;
+  return override;
+}
+
+export function getForcedBroadcastClip(nowMs = Date.now()): ForcedBroadcastOverride | null {
+  const g = globalThis as Record<string, unknown>;
+  const cur = g[GLOBAL_OVERRIDE_KEY] as ForcedBroadcastOverride | null | undefined;
+  if (!cur) return null;
+  if (nowMs >= cur.expiresAtMs) {
+    g[GLOBAL_OVERRIDE_KEY] = null;
+    return null;
+  }
+  return cur;
+}
+
+export function bumpCatalogRevision(): number {
+  const g = globalThis as Record<string, unknown>;
+  const next = ((g[GLOBAL_REVISION_KEY] as number) || 0) + 1;
+  g[GLOBAL_REVISION_KEY] = next;
+  return next;
+}
+
+export function getCatalogRevision(): number {
+  const g = globalThis as Record<string, unknown>;
+  return (g[GLOBAL_REVISION_KEY] as number) || 0;
+}

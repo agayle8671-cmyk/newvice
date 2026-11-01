@@ -68,11 +68,11 @@ export default async function RoomPage({ params }: RoomPageProps) {
   return (
     <Suspense
       fallback={
-        <div className="h-screen w-full bg-surface-dark flex items-center justify-center">
+        <div className="min-h-screen w-full bg-white text-black flex items-center justify-center">
           <div className="text-center">
-            <div className="w-10 h-10 border-2 border-vice-pink border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-vice-cyan/50 text-sm font-[family-name:var(--font-chat)]">
-              Loading drive-in...
+            <div className="w-8 h-8 border-2 border-[#e04040] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-xs uppercase tracking-widest font-bold text-black/70">
+              Loading Live Broadcast...
             </p>
           </div>
         </div>

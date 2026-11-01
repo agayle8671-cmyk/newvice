@@ -5,12 +5,13 @@ import dynamic from "next/dynamic";
 import NowPlaying from "./NowPlaying";
 import type { VideoItem } from "@/lib/video/types";
 import type { RoomSyncMode } from "@/lib/realtime/useDriveInRoom";
+import type { PlayerTelemetryState } from "./HTML5Player";
 
 const HTML5Player = dynamic(() => import("./HTML5Player"), {
   ssr: false,
   loading: () => (
     <div className="w-full h-full bg-black flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-[#00f3ff] border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-[#e04040] border-t-transparent rounded-full animate-spin" />
     </div>
   ),
 });
@@ -18,6 +19,8 @@ const HTML5Player = dynamic(() => import("./HTML5Player"), {
 interface VideoEngineProps {
   /** Called whenever the currently-playing video changes */
   onItemChange?: (item: VideoItem | null) => void;
+  /** Called whenever the HTMLTrackElement (kind="metadata") cue or frame telemetry updates */
+  onTelemetryChange?: (telemetry: PlayerTelemetryState) => void;
   /** Show the NowPlaying strip inside this component */
   showNowPlaying?: boolean;
   /** True when an overlay modal is open so embed iframes shield pointer events */
@@ -34,6 +37,7 @@ interface VideoEngineProps {
 
 export default function VideoEngine({
   onItemChange,
+  onTelemetryChange,
   showNowPlaying = false,
   modalOpen = false,
   syncMode,
@@ -65,6 +69,7 @@ export default function VideoEngine({
       >
         <HTML5Player
           onItemChange={handleItemChange}
+          onTelemetryChange={onTelemetryChange}
           modalOpen={modalOpen}
           syncMode={syncMode}
           syncedCurrent={syncedCurrent}

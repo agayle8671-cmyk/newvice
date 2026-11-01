@@ -28,7 +28,7 @@ export default function NowPlaying({ item, syncMode }: NowPlayingProps) {
       ? [{ src: item.thumbnail, sizes: "512x512" }]
       : [
           {
-            src: "/images/drive-in-background.jpg",
+            src: "/images/gta/official_cover_art_landscape.jpg",
             sizes: "1408x768",
             type: "image/jpeg",
           },
@@ -40,7 +40,7 @@ export default function NowPlaying({ item, syncMode }: NowPlayingProps) {
         artist: item.scoutName
           ? `${item.creatorName} • Scouted by ${item.scoutName}`
           : `${item.creatorName} (${item.platform})`,
-        album: "Leonida Vice Drive-In Theater",
+        album: "Leonida Vice Live Broadcast",
         artwork,
       });
     } catch {

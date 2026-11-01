@@ -1,0 +1,608 @@
+@import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Inline+Text:wght@700;800;900&family=Big+Shoulders+Text:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Roboto+Slab:wght@300;400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap");
+
+/* ════════════════════════════════════════════════════════════════════
+   LEONIDA VICE — Dual-Edition Editorial Broadsheet Skin
+   - Day Edition ("day"): Warm Sun-Bleached Miami Newsprint (#F4EFE4)
+   - Night Edition ("night"): Vice City After-Hours Night Wire (#0B0E14)
+   ════════════════════════════════════════════════════════════════════ */
+
+.np-root,
+.np-root[data-edition="day"] {
+  --np-bg: #f4efe4;
+  --np-surface: #faf7f0;
+  --np-surface-alt: #ede7d8;
+  --np-band: #e6dfce;
+  --np-ink: #151412;
+  --np-ink-soft: #2c2925;
+  --np-ink-muted: #635e54;
+  --np-rule: #1e1c19;
+  --np-rule-soft: rgba(28, 26, 23, 0.16);
+  --np-red: #d9383a;
+  --np-cyan: #0c7c7b;
+  --np-shadow-hard: #151412;
+  --np-pinstripe-ink: rgba(21, 20, 18, 0.72);
+  --np-announcement-bg: #f7e6e4;
+
+  --np-black: var(--np-ink);
+  --np-grey: var(--np-band);
+  --np-muted: var(--np-ink-soft);
+  --np-max: 1400px;
+
+  --f-logo: "Big Shoulders Inline Text", "Big Shoulders Text", Impact, sans-serif;
+  --f-head: "Big Shoulders Text", Impact, sans-serif;
+  --f-slab: "Roboto Slab", Georgia, serif;
+  --f-ui: "Work Sans", Arial, sans-serif;
+
+  background-color: var(--np-bg);
+  background-image:
+    radial-gradient(1200px 500px at 50% 0%, rgba(255, 252, 244, 0.65), transparent 75%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.026'/%3E%3C/svg%3E");
+  color: var(--np-ink);
+  font-family: var(--f-slab);
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
+  scrollbar-color: var(--np-ink) var(--np-band);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ── NIGHT WIRE EDITION (Dark Investigative Press Room) ─────────────── */
+.np-root[data-edition="night"] {
+  --np-bg: #0b0e14;
+  --np-surface: #131822;
+  --np-surface-alt: #1a2130;
+  --np-band: #080a0f;
+  --np-ink: #f3efe6;
+  --np-ink-soft: #d7d2c6;
+  --np-ink-muted: #989284;
+  --np-rule: #2b3344;
+  --np-rule-soft: rgba(243, 239, 230, 0.12);
+  --np-red: #ff4252;
+  --np-cyan: #00f3ff;
+  --np-shadow-hard: #050609;
+  --np-pinstripe-ink: rgba(243, 239, 230, 0.28);
+  --np-announcement-bg: rgba(255, 66, 82, 0.12);
+
+  background-color: var(--np-bg);
+  background-image:
+    radial-gradient(1100px 460px at 50% 0%, rgba(255, 66, 82, 0.07), rgba(0, 243, 255, 0.035) 45%, transparent 78%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  color: var(--np-ink);
+  scrollbar-color: #2b3344 #0b0e14;
+}
+
+html:has(.np-root),
+html:has(.np-root) * {
+  scrollbar-color: #2b3344 #e6dfce;
+}
+html:has(.np-root) body {
+  background: #f4efe4;
+}
+html:has(.np-root[data-edition="night"]) body {
+  background: #0b0e14;
+}
+
+.np-root ::selection {
+  background: var(--np-red);
+  color: #fff;
+}
+.np-root a { color: inherit; text-decoration: none; }
+.np-root img { display: block; }
+.np-root button, .np-root input, .np-root textarea { font-family: inherit; }
+
+.np-wrap { max-width: var(--np-max); margin: 0 auto; padding: 0 24px; }
+
+/* ── Semantic Mapping of Newspaper Surfaces & Ink ───────────────────── */
+.np-root .bg-white {
+  background-color: var(--np-surface) !important;
+}
+.np-root section.bg-white {
+  background-color: transparent !important;
+}
+.np-root header.bg-white {
+  background-color: var(--np-surface) !important;
+}
+.np-root .bg-\[\#eeeeee\] {
+  background-color: var(--np-band) !important;
+}
+.np-root .bg-\[\#fcfcfc\],
+.np-root .bg-\[\#fafafa\],
+.np-root .bg-\[\#f8f8f8\],
+.np-root .bg-\[\#f7f7f7\],
+.np-root .bg-\[\#f6f6f6\],
+.np-root .bg-\[\#f5f5f5\],
+.np-root .bg-\[\#f4f4f4\],
+.np-root .bg-\[\#f0f0f0\] {
+  background-color: var(--np-surface-alt) !important;
+}
+.np-root .bg-\[\#fff4f4\],
+.np-root .bg-\[\#fff2f2\] {
+  background-color: var(--np-announcement-bg) !important;
+}
+
+/* Preserve white pill buttons inside explicitly dark headers (.bg-black) */
+.np-root .bg-black .bg-white {
+  background-color: #faf7f0 !important;
+  color: #151412 !important;
+}
+.np-root .bg-black .bg-white:hover {
+  background-color: var(--np-red) !important;
+  color: #ffffff !important;
+}
+
+/* Text color mappings inside broadsheet */
+.np-root .text-black {
+  color: var(--np-ink) !important;
+}
+.np-root .bg-black .text-black,
+.np-root .bg-amber-400.text-black,
+.np-root .bg-amber-500.text-black {
+  color: #111111 !important;
+}
+.np-root .text-\[\#111\],
+.np-root .text-black\/90,
+.np-root .text-black\/85 {
+  color: var(--np-ink-soft) !important;
+}
+.np-root .text-black\/80,
+.np-root .text-black\/75,
+.np-root .text-black\/70,
+.np-root .text-black\/65,
+.np-root .text-black\/60,
+.np-root .text-black\/50,
+.np-root .text-black\/45,
+.np-root .text-black\/40 {
+  color: var(--np-ink-muted) !important;
+}
+.np-root .placeholder-black\/50::placeholder {
+  color: var(--np-ink-muted) !important;
+}
+.np-root .text-\[\#e04040\] {
+  color: var(--np-red) !important;
+}
+.np-root .bg-\[\#e04040\] {
+  background-color: var(--np-red) !important;
+}
+
+/* Border & hairline mappings inside broadsheet */
+.np-root .border-black {
+  border-color: var(--np-rule) !important;
+}
+.np-root .border-black\/40,
+.np-root .border-black\/35,
+.np-root .border-black\/30,
+.np-root .border-black\/25,
+.np-root .border-black\/20,
+.np-root .border-black\/15 {
+  border-color: var(--np-rule-soft) !important;
+}
+
+/* Night mode adjustments for interactive hover states */
+.np-root[data-edition="night"] .hover\:text-black:hover {
+  color: var(--np-ink) !important;
+}
+.np-root[data-edition="night"] .hover\:bg-black:hover {
+  background-color: var(--np-red) !important;
+  border-color: var(--np-red) !important;
+  color: #ffffff !important;
+}
+.np-root[data-edition="night"] .hover\:bg-\[\#f4f4f4\]:hover,
+.np-root[data-edition="night"] .hover\:bg-\[\#f7f7f7\]:hover {
+  background-color: var(--np-surface-alt) !important;
+}
+
+/* ── Type Helpers ───────────────────────────────────────────────────── */
+.np-logo {
+  font-family: var(--f-logo);
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--np-ink);
+}
+.np-head {
+  font-family: var(--f-head);
+  font-weight: 600;
+  line-height: 1.12;
+  color: var(--np-ink);
+}
+.np-slab { font-family: var(--f-slab); font-weight: 400; }
+.np-ui { font-family: var(--f-ui); }
+.np-red { color: var(--np-red); }
+
+/* hover underline used by tagDiv titles */
+.np-link {
+  background-image: linear-gradient(var(--np-red), var(--np-red));
+  background-size: 0 2px;
+  background-repeat: no-repeat;
+  background-position: 0 94%;
+  transition: background-size 0.25s ease, color 0.2s ease;
+}
+.np-link:hover {
+  background-size: 100% 2px;
+}
+
+/* ── Category Pipe  | SCANDALS | ────────────────────────────────────── */
+.np-pipe {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--f-head);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--np-red);
+  line-height: 1;
+  white-space: nowrap;
+}
+.np-pipe::before,
+.np-pipe::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--np-red);
+}
+.np-pipe::before { margin-right: 6px; }
+.np-pipe::after { margin-left: 6px; }
+.np-pipe:hover { color: var(--np-ink); }
+
+.np-meta {
+  font-family: var(--f-ui);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--np-ink-muted);
+}
+
+/* ── Signature Overlapping Cut-Out Headline (box-decoration per line) ─ */
+.np-cutout {
+  display: inline;
+  background: var(--np-surface);
+  color: var(--np-ink);
+  padding: 2px 11px 4px;
+  line-height: 1.38;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+.np-root[data-edition="night"] .np-cutout {
+  background: #141923;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(243, 239, 230, 0.14);
+}
+.np-cutout-box {
+  position: relative;
+  margin-top: -46px;
+  padding: 0 24px;
+  text-align: center;
+  z-index: 2;
+}
+.np-cutout-box.left {
+  text-align: left;
+  padding: 0 0 0 34px;
+  margin-top: -48px;
+}
+.np-cutout-lined .np-cutout {
+  border: 1px solid var(--np-rule);
+  border-bottom-width: 3px;
+  padding: 2px 12px 5px;
+  line-height: 1.38;
+}
+.np-root[data-edition="night"] .np-cutout-lined .np-cutout {
+  border-color: var(--np-rule);
+  border-bottom-color: var(--np-red);
+}
+
+/* ── Pinstripe Section Header (DON'T MISS / LATEST POSTS) ───────────── */
+.np-pinstripe {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76px;
+  margin: 0 0 30px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--np-pinstripe-ink) 0,
+    var(--np-pinstripe-ink) 1px,
+    transparent 1px,
+    transparent 11px
+  );
+  background-size: 100% 73px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.np-pinstripe > span {
+  background: var(--np-surface);
+  color: var(--np-ink);
+  border: 1px solid var(--np-rule);
+  border-bottom: 4px solid var(--np-rule);
+  padding: 4px 28px 6px;
+  font-family: var(--f-head);
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 58px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+.np-root[data-edition="night"] .np-pinstripe > span {
+  border-bottom-color: var(--np-red);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Red Block Title (TOP 5 THIS WEEK / LEONIDA DOSSIER) ────────────── */
+.np-redbar {
+  background: var(--np-red);
+  color: #fff;
+  text-align: center;
+  font-family: var(--f-head);
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 28px;
+  line-height: 1;
+  padding: 9px 10px 10px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Block Title with Underline Rule (STORY / LEAKS & RUMORS) ───────── */
+.np-blocktitle {
+  font-family: var(--f-head);
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 36px;
+  line-height: 1;
+  text-align: center;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--np-rule);
+  margin-bottom: 30px;
+  color: var(--np-ink);
+}
+
+/* ── Watermark Number in Top 5 ──────────────────────────────────────── */
+.np-num {
+  position: absolute;
+  right: 0;
+  bottom: -4px;
+  font-family: var(--f-head);
+  font-weight: 400;
+  font-size: 50px;
+  line-height: 1;
+  color: var(--np-ink);
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+/* ── Image Hover Zoom ───────────────────────────────────────────────── */
+.np-imgwrap {
+  position: relative;
+  overflow: hidden;
+  background: var(--np-band);
+}
+.np-imgwrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+a:hover .np-imgwrap img,
+.np-imgwrap:hover img {
+  transform: scale(1.04);
+}
+
+/* ── Vertical Column Rules ──────────────────────────────────────────── */
+.np-vr { border-right: 1px solid var(--np-rule); }
+.np-vl { border-left: 1px solid var(--np-rule); }
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+.np-btn-red {
+  background: var(--np-red);
+  color: #fff;
+  font-family: var(--f-head);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 22px;
+  padding: 10px 20px;
+  line-height: 1;
+  transition: background 0.2s, transform 0.15s;
+}
+.np-btn-red:hover {
+  background: var(--np-ink);
+  color: var(--np-surface);
+}
+.np-btn-box {
+  border: 1px solid var(--np-rule);
+  box-shadow: 2px 3px 0 var(--np-rule);
+  background: var(--np-surface);
+  color: var(--np-ink);
+  font-family: var(--f-head);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 22px;
+  line-height: 1;
+  padding: 8px 14px;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+.np-btn-box:hover {
+  box-shadow: 0 0 0 var(--np-rule);
+  transform: translate(2px, 3px);
+  border-color: var(--np-red);
+}
+.np-btn-ui {
+  font-family: var(--f-ui);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 13px;
+}
+
+/* ── Edition Toggle Pill (Day Paper vs Night Wire) ──────────────────── */
+.np-edition-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--np-rule);
+  background: var(--np-surface-alt);
+  padding: 2px;
+  gap: 2px;
+}
+.np-edition-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-family: var(--f-ui);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  color: var(--np-ink-muted);
+}
+.np-edition-pill:hover {
+  color: var(--np-ink);
+}
+.np-edition-pill.active-day {
+  background: #151412;
+  color: #faf7f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.np-edition-pill.active-night {
+  background: var(--np-red);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 66, 82, 0.35);
+}
+
+.np-input {
+  width: 100%;
+  border: 1px solid var(--np-rule);
+  border-bottom-width: 3px;
+  background: var(--np-surface);
+  padding: 12px 10px;
+  font-family: var(--f-ui);
+  font-size: 14px;
+  outline: none;
+  color: var(--np-ink);
+}
+.np-input::placeholder {
+  color: var(--np-ink-muted);
+  opacity: 0.85;
+}
+.np-input:focus {
+  border-color: var(--np-red);
+}
+
+/* ── Article Body ───────────────────────────────────────────────────── */
+.np-article {
+  font-family: var(--f-slab);
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--np-ink-soft);
+}
+.np-article p { margin: 0 0 22px; }
+.np-article h2 {
+  font-family: var(--f-head);
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1.15;
+  margin: 34px 0 16px;
+  color: var(--np-ink);
+}
+.np-article ul { margin: 0 0 22px; padding-left: 22px; list-style: square; }
+.np-article li { margin-bottom: 8px; }
+.np-article blockquote {
+  margin: 30px 0;
+  padding: 18px 26px;
+  border-left: 4px solid var(--np-red);
+  background: var(--np-surface);
+  font-family: var(--f-head);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 30px;
+  line-height: 1.2;
+  color: var(--np-ink);
+}
+.np-article blockquote cite {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--f-ui);
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--np-red);
+}
+.np-article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 26px;
+  font-family: var(--f-ui);
+  font-size: 14px;
+}
+.np-article th {
+  background: var(--np-ink);
+  color: var(--np-surface);
+  text-align: left;
+  padding: 9px 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 12px;
+}
+.np-article td {
+  border-bottom: 1px solid var(--np-rule);
+  padding: 9px 12px;
+  vertical-align: top;
+}
+.np-article figure { margin: 30px 0; }
+.np-article figcaption {
+  font-family: var(--f-ui);
+  font-size: 12px;
+  color: var(--np-ink-muted);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* ── Sticky Nav Shadow ──────────────────────────────────────────────── */
+.np-nav-stuck {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+}
+.np-root[data-edition="night"] .np-nav-stuck {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.65);
+}
+
+/* ── Mega Menu ──────────────────────────────────────────────────────── */
+.np-mega {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  background: var(--np-surface);
+  border-top: 1px solid var(--np-rule);
+  border-bottom: 4px solid var(--np-rule);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.14);
+  z-index: 60;
+}
+.np-root[data-edition="night"] .np-mega {
+  border-bottom-color: var(--np-red);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.72);
+}
+
+/* Live Dot */
+@keyframes np-pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+.np-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--np-red);
+  animation: np-pulse 1.4s infinite;
+  display: inline-block;
+}
+
+/* Responsive */
+@media (max-width: 1023px) {
+  .np-pinstripe > span { font-size: 38px; padding: 4px 18px 6px; }
+  .np-vr { border-right: 0; }
+  .np-vl { border-left: 0; }
+}

@@ -2,6 +2,12 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { VideoItem, PlayerState } from "@/lib/video/types";
+import {
+  generateXRayCuesForVideo,
+  LEONIDA_REGION_PINS,
+  type XRayMetadataCue,
+  type VideoSeekCommandDetail,
+} from "@/lib/video/xray-telemetry";
 import { getDriveInAudioGraph } from "@/lib/audio/DriveInAudioGraph";
 
 const HANDOFF_THRESHOLD_SEC = 2.5;
@@ -111,7 +117,12 @@ export function resolveMediaUrl(
   if (strategy === "vercel" || strategy === "party") {
     return { url: `/api/video/stream?url=${encodeURIComponent(rawUrl)}`, useAnonymousCors: true };
   }
-  return { url: rawUrl, useAnonymousCors: false };
+  const isNativeCorsCdn =
+    rawUrl.includes("archive.org") ||
+    rawUrl.includes("supabase.co") ||
+    rawUrl.includes("mux.dev") ||
+    rawUrl.includes("peertube");
+  return { url: rawUrl, useAnonymousCors: isNativeCorsCdn };
 }
 
 function hasDirectStream(item: VideoItem | null | undefined): boolean {
@@ -216,6 +227,8 @@ export interface UseSeamlessPlayerOptions {
   onReportDuration?: (videoId: string, durationSec: number) => void;
   /** Requests immediate room sync refresh if needed */
   onRefreshSync?: () => Promise<void>;
+  /** Fired whenever the HTMLTrackElement (kind="metadata") cue changes */
+  onCueChange?: (cue: XRayMetadataCue | null, allCues: XRayMetadataCue[]) => void;
 }
 
 // ─── Dual-DOM Seamless Player Hook 2.0 ────────────────────────────────────────
@@ -227,6 +240,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     getSyncedOffsetSec,
     onReportDuration,
     onRefreshSync,
+    onCueChange,
   } = options;
 
   const isRoomControlled = syncedCurrent !== undefined;
@@ -244,6 +258,17 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   const volumeRef = useRef(0.85);
   const mutedRef = useRef(true);
   const reportedDurationIds = useRef<Set<string>>(new Set());
+
+  // Forensic / manual seek hold: when true, room-clock drift correction yields to user inspection
+  const forensicHoldRef = useRef(false);
+  const [isForensicHold, setIsForensicHold] = useState(false);
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [fps, setFps] = useState(30);
+  const [frameNumber, setFrameNumber] = useState(0);
+  const [cues, setCues] = useState<XRayMetadataCue[]>([]);
+  const [activeCue, setActiveCue] = useState<XRayMetadataCue | null>(null);
+  const cuesRef = useRef<XRayMetadataCue[]>([]);
+  const activeCueIdRef = useRef<string | null>(null);
 
   const [playerState, setPlayerState] = useState<PlayerState>({
     status: "idle",
@@ -298,6 +323,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   // ── Align playback position to authoritative room clock (<50ms drift target) ──
   const alignElementToRoomClock = useCallback(
     (el: HTMLVideoElement, forceHardSeek = false) => {
+      if (!forceHardSeek && forensicHoldRef.current) return;
       if (!getSyncedOffsetSec) return;
       const dur = el.duration;
       if (!dur || Number.isNaN(dur) || !Number.isFinite(dur) || dur <= 1) return;
@@ -631,6 +657,169 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     swapRef.current = swap;
   }, [swap]);
 
+  // ── Synchronize active X-Ray metadata cue at a given timestamp ──────────────
+  const syncCueAtTime = useCallback(
+    (timeSec: number, cueList: XRayMetadataCue[] = cuesRef.current) => {
+      if (!cueList || cueList.length === 0) return;
+      const matched =
+        cueList.find((c) => timeSec >= c.startTime && timeSec < c.endTime) ??
+        cueList[cueList.length - 1] ??
+        null;
+      if (matched && matched.id !== activeCueIdRef.current) {
+        activeCueIdRef.current = matched.id;
+        setActiveCue(matched);
+        onCueChange?.(matched, cueList);
+      }
+    },
+    [onCueChange]
+  );
+
+  // ── Attach HTMLTrackElement (kind="metadata") & VTTCues when clip loads ─────
+  useEffect(() => {
+    const item = isEmbedFallback ? syncedCurrent : playerState.current;
+    if (!item) {
+      cuesRef.current = [];
+      activeCueIdRef.current = null;
+      setCues([]);
+      setActiveCue(null);
+      return;
+    }
+
+    // Reset forensic hold on new clip transition
+    forensicHoldRef.current = false;
+    setIsForensicHold(false);
+
+    const generated = generateXRayCuesForVideo(
+      item,
+      playerState.duration > 5 ? playerState.duration : item.durationSec
+    );
+    cuesRef.current = generated;
+    setCues(generated);
+
+    const el = activeEl();
+    const initialTime = el && Number.isFinite(el.currentTime) ? el.currentTime : 0;
+    const firstMatch =
+      generated.find((c) => initialTime >= c.startTime && initialTime < c.endTime) ??
+      generated[0] ??
+      null;
+    activeCueIdRef.current = firstMatch?.id ?? null;
+    setActiveCue(firstMatch);
+    onCueChange?.(firstMatch, generated);
+
+    // Populate native HTML5 TextTrack (kind="metadata") with VTTCue payloads
+    if (!el || typeof window === "undefined" || !("VTTCue" in window)) return;
+
+    let metaTrack: TextTrack | null = null;
+    for (let i = 0; i < el.textTracks.length; i++) {
+      if (el.textTracks[i].label === "leonida-xray") {
+        metaTrack = el.textTracks[i];
+        break;
+      }
+    }
+    if (!metaTrack) {
+      metaTrack = el.addTextTrack("metadata", "leonida-xray", "en");
+    }
+    metaTrack.mode = "hidden";
+
+    // Clear previous cues on this track
+    if (metaTrack.cues) {
+      const existing = Array.from(metaTrack.cues);
+      for (const oldCue of existing) {
+        try {
+          metaTrack.removeCue(oldCue);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    for (const cueData of generated) {
+      try {
+        const vttCue = new VTTCue(
+          cueData.startTime,
+          cueData.endTime,
+          JSON.stringify(cueData)
+        );
+        vttCue.id = cueData.id;
+        metaTrack.addCue(vttCue);
+      } catch {
+        // ignore if VTTCue constructor rejects bounds
+      }
+    }
+
+    const handleNativeCueChange = () => {
+      if (!metaTrack?.activeCues || metaTrack.activeCues.length === 0) return;
+      const activeVtt = metaTrack.activeCues[0] as VTTCue;
+      if (!activeVtt?.text) return;
+      try {
+        const parsed = JSON.parse(activeVtt.text) as XRayMetadataCue;
+        if (parsed.id !== activeCueIdRef.current) {
+          activeCueIdRef.current = parsed.id;
+          setActiveCue(parsed);
+          onCueChange?.(parsed, cuesRef.current);
+        }
+      } catch {
+        // fallback to time lookup
+      }
+    };
+
+    metaTrack.addEventListener("cuechange", handleNativeCueChange);
+    return () => {
+      metaTrack?.removeEventListener("cuechange", handleNativeCueChange);
+    };
+  }, [
+    isEmbedFallback,
+    syncedCurrent?.id,
+    playerState.current?.id,
+    Math.round(playerState.duration || 0),
+    activeEl,
+    onCueChange,
+  ]);
+
+  // ── Frame-Accurate Telemetry via requestVideoFrameCallback ─────────────────
+  useEffect(() => {
+    const el = activeEl() as
+      | (HTMLVideoElement & {
+          requestVideoFrameCallback?: (
+            cb: (now: number, metadata: { mediaTime: number; presentedFrames: number }) => void
+          ) => number;
+          cancelVideoFrameCallback?: (handle: number) => void;
+        })
+      | null;
+    if (!el || typeof el.requestVideoFrameCallback !== "function") return;
+
+    let handle = 0;
+    let lastMediaTime = -1;
+    let lastPresentedFrames = -1;
+
+    const onFrame = (_now: number, metadata: { mediaTime: number; presentedFrames: number }) => {
+      if (lastMediaTime >= 0 && metadata.mediaTime > lastMediaTime) {
+        const dt = metadata.mediaTime - lastMediaTime;
+        const df = metadata.presentedFrames - lastPresentedFrames;
+        if (dt > 0.005 && dt < 0.5 && df > 0 && df <= 15) {
+          const rawFps = df / dt;
+          const snappedFps = rawFps > 45 ? 60 : rawFps > 26 ? 30 : 24;
+          setFps(snappedFps);
+        }
+      }
+      lastMediaTime = metadata.mediaTime;
+      lastPresentedFrames = metadata.presentedFrames;
+
+      setCurrentTimeSec(metadata.mediaTime);
+      setFrameNumber(Math.max(0, Math.round(metadata.mediaTime * fps)));
+      syncCueAtTime(metadata.mediaTime);
+
+      handle = el.requestVideoFrameCallback!(onFrame);
+    };
+
+    handle = el.requestVideoFrameCallback(onFrame);
+    return () => {
+      if (handle && typeof el.cancelVideoFrameCallback === "function") {
+        el.cancelVideoFrameCallback(handle);
+      }
+    };
+  }, [activeEl, playerState.current?.id, fps, syncCueAtTime]);
+
   // ── Time update -> progress bar + <50ms drift alignment + standalone handoff ──
   const handleTimeUpdate = useCallback(() => {
     const el = activeEl() as VideoWithMeta | null;
@@ -646,6 +835,9 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     const progress = el.currentTime / el.duration;
     const remaining = el.duration - el.currentTime;
 
+    setCurrentTimeSec(el.currentTime);
+    setFrameNumber(Math.max(0, Math.round(el.currentTime * fps)));
+    syncCueAtTime(el.currentTime);
     setPlayerState((s) => ({ ...s, progress, duration: el.duration }));
 
     if (
@@ -659,10 +851,10 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
     if (isRoomControlled) {
       alignElementToRoomClock(el, false);
-    } else if (remaining <= HANDOFF_THRESHOLD_SEC && !swapping.current) {
+    } else if (remaining <= HANDOFF_THRESHOLD_SEC && !swapping.current && !forensicHoldRef.current) {
       swap();
     }
-  }, [activeEl, clearWatchdog, isRoomControlled, alignElementToRoomClock, onReportDuration, swap]);
+  }, [activeEl, clearWatchdog, isRoomControlled, alignElementToRoomClock, onReportDuration, swap, fps, syncCueAtTime]);
 
   // ── Resilient Slot Handlers (Proxy -> Next Proxy -> Direct Raw Fallback) ──
   const makeSlotHandlers = useCallback(
@@ -847,6 +1039,8 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   );
 
   const skipToNext = useCallback(() => {
+    forensicHoldRef.current = false;
+    setIsForensicHold(false);
     if (!swapping.current) swap();
   }, [swap]);
 
@@ -854,14 +1048,175 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     const el = activeEl();
     if (!el) return;
     if (el.paused) {
-      if (isRoomControlled) alignElementToRoomClock(el, true);
       el.play().catch(() => {});
       setPlayerState((s) => ({ ...s, status: "playing" }));
     } else {
+      forensicHoldRef.current = true;
+      setIsForensicHold(true);
       el.pause();
       setPlayerState((s) => ({ ...s, status: "paused" }));
     }
-  }, [activeEl, isRoomControlled, alignElementToRoomClock]);
+  }, [activeEl]);
+
+  // ── Stage 1: Frame-Accurate Forensic Stepping (-1f / +1f) ─────────────────
+  const stepFrames = useCallback(
+    (deltaFrames: number) => {
+      const el = activeEl();
+      const effectiveFps = fps || 30;
+      const dt = deltaFrames / effectiveFps;
+
+      forensicHoldRef.current = true;
+      setIsForensicHold(true);
+
+      if (el && !isEmbedFallback) {
+        if (!el.paused) {
+          el.pause();
+        }
+        const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 75;
+        const nextTime = Math.max(0, Math.min(dur - 0.01, el.currentTime + dt));
+        try {
+          el.currentTime = nextTime;
+        } catch {
+          // ignore if media not seekable
+        }
+        setCurrentTimeSec(nextTime);
+        setFrameNumber(Math.max(0, Math.round(nextTime * effectiveFps)));
+        syncCueAtTime(nextTime);
+        setPlayerState((s) => ({
+          ...s,
+          status: "paused",
+          progress: dur > 0 ? nextTime / dur : s.progress,
+        }));
+        return;
+      }
+
+      // Fallback when inspecting an official embed or before metadata
+      setCurrentTimeSec((prev) => {
+        const dur = playerState.duration > 0 ? playerState.duration : 75;
+        const nextTime = Math.max(0, Math.min(dur, prev + dt));
+        setFrameNumber(Math.max(0, Math.round(nextTime * effectiveFps)));
+        syncCueAtTime(nextTime);
+        return nextTime;
+      });
+    },
+    [activeEl, fps, isEmbedFallback, playerState.duration, syncCueAtTime]
+  );
+
+  // ── Stage 2: Bi-Directional Inbound Seek (Map Pin / Cue / Article -> Video) ──
+  const seekToSeconds = useCallback(
+    (targetSec: number, pauseOnArrival = false) => {
+      const el = activeEl();
+      const effectiveFps = fps || 30;
+      forensicHoldRef.current = true;
+      setIsForensicHold(true);
+
+      if (el && !isEmbedFallback) {
+        const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 75;
+        const clamped = Math.max(0, Math.min(dur - 0.1, targetSec));
+        try {
+          el.currentTime = clamped;
+        } catch {
+          // ignore
+        }
+        if (pauseOnArrival) {
+          el.pause();
+          setPlayerState((s) => ({
+            ...s,
+            status: "paused",
+            progress: dur > 0 ? clamped / dur : s.progress,
+          }));
+        } else {
+          el.play().catch(() => {});
+          setPlayerState((s) => ({
+            ...s,
+            status: "playing",
+            progress: dur > 0 ? clamped / dur : s.progress,
+          }));
+        }
+        setCurrentTimeSec(clamped);
+        setFrameNumber(Math.max(0, Math.round(clamped * effectiveFps)));
+        syncCueAtTime(clamped);
+        return;
+      }
+
+      // Embed / simulated clock fallback
+      const dur = playerState.duration > 0 ? playerState.duration : 75;
+      const clamped = Math.max(0, Math.min(dur, targetSec));
+      setCurrentTimeSec(clamped);
+      setFrameNumber(Math.max(0, Math.round(clamped * effectiveFps)));
+      syncCueAtTime(clamped);
+    },
+    [activeEl, fps, isEmbedFallback, playerState.duration, syncCueAtTime]
+  );
+
+  // ── Re-lock to authoritative communal room clock after forensic inspection ──
+  const resumeRoomSync = useCallback(() => {
+    forensicHoldRef.current = false;
+    setIsForensicHold(false);
+    const el = activeEl();
+    if (el && !isEmbedFallback) {
+      if (isRoomControlled) {
+        alignElementToRoomClock(el, true);
+      }
+      el.play().catch(() => {});
+      setPlayerState((s) => ({ ...s, status: "playing" }));
+    }
+  }, [activeEl, isEmbedFallback, isRoomControlled, alignElementToRoomClock]);
+
+  // ── Global Bi-Directional Event Bus Listener (lv:seek-video) ───────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onSeekEvent = (e: Event) => {
+      const detail = (e as CustomEvent<VideoSeekCommandDetail>).detail;
+      if (!detail) return;
+      if (detail.regionId && cuesRef.current.length > 0) {
+        const regionCue = cuesRef.current.find(
+          (c) => c.location.regionId === detail.regionId
+        );
+        if (regionCue) {
+          seekToSeconds(regionCue.startTime + 0.5, Boolean(detail.autoPauseForensic));
+          return;
+        }
+        const pin = LEONIDA_REGION_PINS.find((p) => p.id === detail.regionId);
+        if (pin) {
+          seekToSeconds(pin.defaultSeekSec, Boolean(detail.autoPauseForensic));
+          return;
+        }
+      }
+      if (typeof detail.timestampSec === "number") {
+        seekToSeconds(detail.timestampSec, Boolean(detail.autoPauseForensic));
+      }
+    };
+    window.addEventListener("lv:seek-video", onSeekEvent);
+    return () => window.removeEventListener("lv:seek-video", onSeekEvent);
+  }, [seekToSeconds]);
+
+  // Honor inbound ?seek= and ?region= query parameters when jumping from an article
+  const appliedQuerySeekRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || appliedQuerySeekRef.current) return;
+    if (!playerState.current && !syncedCurrent) return;
+    const params = new URLSearchParams(window.location.search);
+    const seekParam = params.get("seek");
+    const regionParam = params.get("region");
+    if (!seekParam && !regionParam) return;
+
+    appliedQuerySeekRef.current = true;
+    const sec = seekParam ? Number(seekParam) : NaN;
+    const timer = setTimeout(() => {
+      if (regionParam && cuesRef.current.length > 0) {
+        const cue = cuesRef.current.find((c) => c.location.regionId === regionParam);
+        if (cue) {
+          seekToSeconds(cue.startTime + 0.3, false);
+          return;
+        }
+      }
+      if (Number.isFinite(sec) && sec >= 0) {
+        seekToSeconds(sec, false);
+      }
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [playerState.current?.id, syncedCurrent?.id, seekToSeconds]);
 
   const exposedState: PlayerState = isEmbedFallback && syncedCurrent
     ? { ...playerState, status: "playing", current: syncedCurrent, next: syncedNext ?? null, progress: 0 }
@@ -882,5 +1237,16 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     setVolume,
     skipToNext,
     togglePlay,
+    // Layer 3 Forensic & Bi-Directional Telemetry Exports
+    currentTimeSec,
+    frameNumber,
+    fps,
+    isForensicHold,
+    cues,
+    activeCue,
+    stepFrames,
+    seekToSeconds,
+    resumeRoomSync,
+    getActiveVideoElement: activeEl,
   };
 }

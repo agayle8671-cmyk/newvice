@@ -3,6 +3,8 @@ import type { VideoItem } from "@/lib/video/types";
 import {
   DEFAULT_CLIP_DURATION_SEC,
   filterCatalogRows,
+  getCatalogRevision,
+  getForcedBroadcastClip,
   rowToVideoItem,
   type CatalogRow,
 } from "@/lib/video/catalog";
@@ -22,10 +24,17 @@ function hashRoomOffset(slug: string): number {
 // Short in-memory catalog cache (15s) to prevent hammering Supabase on concurrent sync checks
 let cachedPlaylist: VideoItem[] | null = null;
 let cachedAtMs = 0;
+let cachedRevision = -1;
 
 async function getActivePlaylist(): Promise<VideoItem[]> {
   const now = Date.now();
-  if (cachedPlaylist && cachedPlaylist.length > 0 && now - cachedAtMs < 15_000) {
+  const rev = getCatalogRevision();
+  if (
+    cachedPlaylist &&
+    cachedPlaylist.length > 0 &&
+    now - cachedAtMs < 15_000 &&
+    cachedRevision === rev
+  ) {
     return cachedPlaylist;
   }
 
@@ -57,6 +66,7 @@ async function getActivePlaylist(): Promise<VideoItem[]> {
       });
       cachedPlaylist = items;
       cachedAtMs = now;
+      cachedRevision = rev;
       return items;
     }
   } catch (err) {
@@ -89,6 +99,30 @@ export async function GET(
       },
       { status: 404, headers: { "Cache-Control": "no-store, max-age=0" } }
     );
+  }
+
+  // If the admin forced/pinned a clip in /admin, play it immediately across the broadcast!
+  const forced = getForcedBroadcastClip(serverNow);
+  if (forced) {
+    const forcedIdx = playlist.findIndex((it) => it.id === forced.videoId);
+    if (forcedIdx >= 0) {
+      const current = playlist[forcedIdx];
+      const next = playlist[(forcedIdx + 1) % playlist.length] ?? null;
+      const currentOffsetMs = Math.max(0, serverNow - forced.startedAtMs);
+      return NextResponse.json(
+        {
+          ok: true,
+          roomSlug,
+          serverNow,
+          current,
+          next,
+          clipStartTimestamp: forced.startedAtMs,
+          currentOffsetMs,
+          adminPinned: true,
+        },
+        { headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
+    }
   }
 
   const durationsMs = playlist.map(

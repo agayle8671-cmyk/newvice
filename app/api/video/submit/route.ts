@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
       status: live ? "live" : "pending",
       id: newVideo.id,
       message: live
-        ? "Clip added to rotation! It will hit the drive-in screen shortly."
+        ? "Clip added to rotation! It will hit the live broadcast screen shortly."
         : "Clip received! We couldn't auto-verify that link, so it's queued for a quick review before it plays.",
     });
   } catch (err: unknown) {

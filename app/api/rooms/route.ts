@@ -10,7 +10,7 @@ export async function GET() {
       {
         slug: "main-theater",
         title: "Main Theater",
-        description: "The main GTA VI drive-in experience",
+        description: "The main GTA VI live broadcast & community newsroom",
         current_video_id: "QdBZY2fkU-0",
         current_video_title: "GTA VI — Welcome to Leonida",
         is_active: true,
@@ -38,7 +38,7 @@ export async function GET() {
       {
         slug: "main-theater",
         title: "Main Theater",
-        description: "The main GTA VI drive-in experience",
+        description: "The main GTA VI live broadcast & community newsroom",
         current_video_id: "QdBZY2fkU-0",
         current_video_title: "GTA VI — Welcome to Leonida",
         is_active: true,
