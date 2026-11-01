@@ -165,6 +165,8 @@ export default function HTML5Player({
         onTimeUpdate={() => {
           if (opacity.A === 1) handleTimeUpdate();
         }}
+        onPlaying={slotAHandlers.onPlaying}
+        onCanPlay={slotAHandlers.onCanPlay}
         onEnded={slotAHandlers.onEnded}
         onError={slotAHandlers.onError}
       />
@@ -183,6 +185,8 @@ export default function HTML5Player({
         onTimeUpdate={() => {
           if (opacity.B === 1) handleTimeUpdate();
         }}
+        onPlaying={slotBHandlers.onPlaying}
+        onCanPlay={slotBHandlers.onCanPlay}
         onEnded={slotBHandlers.onEnded}
         onError={slotBHandlers.onError}
       />

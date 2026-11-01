@@ -476,6 +476,13 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
               <VideoEngine
                 onItemChange={setCurrentVideoItem}
                 modalOpen={anyModalOpen}
+                syncMode={room.syncMode}
+                syncedCurrent={room.current}
+                syncedNext={room.next}
+                clipStartTimestamp={room.clipStartTimestamp}
+                getSyncedOffsetSec={room.getSyncedOffsetSec}
+                onReportDuration={room.reportClipDuration}
+                onRefreshSync={room.refreshSync}
               />
               {/* CRT scanline overlay */}
               <div

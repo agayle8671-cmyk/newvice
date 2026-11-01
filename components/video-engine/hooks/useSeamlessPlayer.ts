@@ -330,6 +330,30 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     [getSyncedOffsetSec]
   );
 
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearWatchdog = useCallback(() => {
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+  }, []);
+
+  const armWatchdog = useCallback(() => {
+    clearWatchdog();
+    watchdogTimerRef.current = setTimeout(() => {
+      const el = activeEl();
+      if (el && (el.readyState < 2 || el.currentTime === 0) && !el.paused) {
+        console.warn("[useSeamlessPlayer] Watchdog timeout (>7s with no progress), auto-recovering...");
+        if (isRoomControlled) {
+          onRefreshSync?.();
+        } else {
+          void swapRef.current();
+        }
+      }
+    }, 7000);
+  }, [clearWatchdog, activeEl, isRoomControlled, onRefreshSync]);
+
   // ── Room-Controlled Sync Effect: Instant <16ms Pre-Buffer Swap or Direct Load ──
   useEffect(() => {
     if (!isRoomControlled) return;
@@ -405,6 +429,8 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         next: syncedNext ?? null,
       }));
 
+      armWatchdog();
+
       await attachSource(
         targetEl,
         streamUrl,
@@ -422,6 +448,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       const syncOnMetadata = () => {
         targetEl.removeEventListener("loadedmetadata", syncOnMetadata);
         if (cancelled) return;
+        clearWatchdog();
         alignElementToRoomClock(targetEl, true);
         if (
           Number.isFinite(targetEl.duration) &&
@@ -443,6 +470,8 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         .play()
         .then(() => {
           if (!cancelled) {
+            clearWatchdog();
+            errorCount.current = 0;
             setPlayerState((s) => ({ ...s, status: "playing" }));
           }
         })
@@ -514,9 +543,30 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     errorCount.current = 0;
 
     const newSlot = activeSlot.current === "A" ? "B" : "A";
-    const newEl = slotEl(newSlot);
-    const oldEl = slotEl(activeSlot.current);
+    const newEl = slotEl(newSlot) as VideoWithMeta | null;
+    const oldEl = slotEl(activeSlot.current) as VideoWithMeta | null;
     const audioGraph = getDriveInAudioGraph();
+
+    let incomingItem = playerState.next;
+
+    // Ensure incoming candidate is actually valid and loaded into newEl
+    if (!incomingItem || !newEl?._rawUrl) {
+      incomingItem = await fetchNext();
+      if (incomingItem && newEl) {
+        const streamUrl = incomingItem.manifestUrl ?? incomingItem.directMp4Url;
+        if (streamUrl) {
+          await attachSource(newEl, streamUrl, incomingItem.id, mutedRef.current);
+        }
+      }
+    }
+
+    if (!incomingItem) {
+      swapping.current = false;
+      setTimeout(() => {
+        void swapRef.current();
+      }, 2000);
+      return;
+    }
 
     activeSlot.current = newSlot;
     setOpacity(newSlot === "A" ? { A: 1, B: 0 } : { A: 0, B: 1 });
@@ -524,7 +574,12 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
     if (newEl) {
       applyVolumeToActiveElement(newEl);
-      newEl.play().catch(() => {});
+      newEl.play().catch(() => {
+        newEl.muted = true;
+        mutedRef.current = true;
+        newEl.play().catch(() => {});
+      });
+      armWatchdog();
     }
 
     if (oldEl) {
@@ -535,10 +590,10 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     setPlayerState((s) => ({
       ...s,
       status: "playing",
-      current: s.next,
+      current: incomingItem,
       next: null,
       progress: 0,
-      duration: 0,
+      duration: Number.isFinite(newEl?.duration) ? (newEl?.duration ?? 0) : 0,
     }));
 
     const nextItem = await fetchNext();
@@ -562,10 +617,12 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   }, [
     isRoomControlled,
     onRefreshSync,
+    playerState.next,
     fetchNext,
     prebufferEl,
     slotEl,
     applyVolumeToActiveElement,
+    armWatchdog,
   ]);
 
   useEffect(() => {
@@ -577,6 +634,11 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     const el = activeEl() as VideoWithMeta | null;
     if (!el || !el.duration || Number.isNaN(el.duration) || el.duration === Infinity) {
       return;
+    }
+
+    clearWatchdog();
+    if (errorCount.current > 0) {
+      errorCount.current = 0;
     }
 
     const progress = el.currentTime / el.duration;
@@ -598,12 +660,25 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     } else if (remaining <= HANDOFF_THRESHOLD_SEC && !swapping.current) {
       swap();
     }
-  }, [activeEl, isRoomControlled, alignElementToRoomClock, onReportDuration, swap]);
+  }, [activeEl, clearWatchdog, isRoomControlled, alignElementToRoomClock, onReportDuration, swap]);
 
   // ── Resilient Slot Handlers (Proxy -> Next Proxy -> Direct Raw Fallback) ──
   const makeSlotHandlers = useCallback(
     (slot: "A" | "B") => ({
+      onPlaying: () => {
+        if (activeSlot.current === slot) {
+          clearWatchdog();
+          errorCount.current = 0;
+          setPlayerState((s) => (s.status !== "playing" ? { ...s, status: "playing" } : s));
+        }
+      },
+      onCanPlay: () => {
+        if (activeSlot.current === slot) {
+          clearWatchdog();
+        }
+      },
       onEnded: () => {
+        clearWatchdog();
         if (activeSlot.current !== slot) return;
         const el = slotEl(slot);
         if (isRoomControlled && el) {
@@ -616,6 +691,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         if (!swapping.current) swap();
       },
       onError: () => {
+        clearWatchdog();
         const el = slotEl(slot) as VideoWithMeta | null;
         if (!el) return;
 
@@ -632,6 +708,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
               if (isActive) {
                 alignElementToRoomClock(el, true);
                 el.play().catch(() => {});
+                armWatchdog();
               } else {
                 el.load();
               }
@@ -643,17 +720,32 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         if (activeSlot.current !== slot) return; // Ignore unrecoverable prebuffer error
 
         errorCount.current++;
+        console.warn(`[useSeamlessPlayer] Stream error on active slot (attempt ${errorCount.current})`);
+
         if (errorCount.current > 3) {
           setPlayerState((s) => ({ ...s, status: "error" }));
+          // Resilient auto-recovery: never remain permanently locked in "SIGNAL LOST"
+          setTimeout(() => {
+            errorCount.current = 0;
+            if (isRoomControlled) {
+              onRefreshSync?.();
+            } else {
+              void swap();
+            }
+          }, 2500);
           return;
         }
+
         setTimeout(() => {
-          if (isRoomControlled) onRefreshSync?.();
-          else if (!swapping.current) swap();
-        }, 1200);
+          if (isRoomControlled) {
+            onRefreshSync?.();
+          } else if (!swapping.current) {
+            void swap();
+          }
+        }, 800);
       },
     }),
-    [isRoomControlled, slotEl, alignElementToRoomClock, onRefreshSync, swap]
+    [isRoomControlled, slotEl, alignElementToRoomClock, onRefreshSync, swap, clearWatchdog, armWatchdog]
   );
 
   const slotAHandlers = makeSlotHandlers("A");
@@ -667,7 +759,10 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
     const first = await fetchNext();
     if (!first) {
-      setPlayerState((s) => ({ ...s, status: "error" }));
+      console.warn("[useSeamlessPlayer] Prime fetch failed, retrying in 2s...");
+      setTimeout(() => {
+        void prime();
+      }, 2000);
       return;
     }
 
@@ -675,10 +770,15 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     if (slotA && (first.manifestUrl || first.directMp4Url)) {
       const url = first.manifestUrl ?? first.directMp4Url!;
       await attachSource(slotA, url, first.id, true);
-      slotA.play().catch(() => {});
+      slotA.play().catch(() => {
+        slotA.muted = true;
+        slotA.play().catch(() => {});
+      });
+      armWatchdog();
     }
 
     setPlayerState((s) => ({ ...s, status: "playing", current: first }));
+    errorCount.current = 0;
 
     const second = await fetchNext();
     if (second && (second.manifestUrl || second.directMp4Url)) {
@@ -690,16 +790,17 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       }
     }
     if (second) setPlayerState((s) => ({ ...s, next: second }));
-  }, [isRoomControlled, fetchNext]);
+  }, [isRoomControlled, fetchNext, armWatchdog]);
 
   useEffect(() => {
     const slotA = playerARef.current;
     const slotB = playerBRef.current;
     return () => {
+      clearWatchdog();
       destroyHls(slotA);
       destroyHls(slotB);
     };
-  }, []);
+  }, [clearWatchdog]);
 
   // ── Audio & Playback Controls ──────────────────────────────────────────────
   const unmute = useCallback(() => {

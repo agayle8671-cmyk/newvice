@@ -168,7 +168,7 @@ def passes_filter(title: str, description: str = "", uploaded_at: Optional[str] 
 
 # ─── Duration bounds ──────────────────────────────────────────────────────────
 MIN_DURATION_SEC = 15     # skip anything shorter (reaction thumbnails, etc.)
-MAX_DURATION_SEC = 10800  # skip anything over 3 h (full streams; separate later)
+MAX_DURATION_SEC = 900    # max 15 minutes: high-tempo gameplay and trailers only
 
 def duration_ok(sec: Optional[int]) -> bool:
     if sec is None:
