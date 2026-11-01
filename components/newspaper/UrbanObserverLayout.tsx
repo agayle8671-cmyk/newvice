@@ -277,17 +277,20 @@ export default function UrbanObserverLayout({
                 </div>
               </div>
 
-              {/* Signature Overlapping White Cutout Broadcast Card */}
-              <div className="relative z-20 mx-3 sm:mx-7 -mt-7 bg-white border border-black border-b-[4px] px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                  <span className="np-pipe text-[14px]">
+              {/* Docked Broadcast Title Card (Clear below 16:9 Video Controls & Subtitles) */}
+              <div className="mt-3 w-full bg-white border border-black border-b-[3px] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                  <span className="np-pipe text-[12.5px]">
                     NOW PLAYING ON LEONIDA TV
                   </span>
-                  <span className="np-meta text-[12px] text-black/75">
+                  <span className="np-meta text-[11.5px] text-black/75 truncate max-w-[260px]">
                     Source: @{liveAuthor}
                   </span>
                 </div>
-                <h1 className="np-head font-extrabold text-[26px] sm:text-[34px] leading-[1.08] text-black">
+                <h1
+                  className="np-head font-extrabold text-[21px] sm:text-[25px] leading-[1.12] text-black line-clamp-2"
+                  title={liveHeadline}
+                >
                   {liveHeadline}
                 </h1>
               </div>

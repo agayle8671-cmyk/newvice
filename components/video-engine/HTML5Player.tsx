@@ -203,7 +203,7 @@ export default function HTML5Player({
       {/* ── Persistent DOM Slot A (<16ms single-frame z-index swap) ──────── */}
       <video
         ref={playerARef}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-contain bg-black"
         style={{
           opacity: isEmbedFallback ? 0 : 1,
           zIndex: opacity.A === 1 ? 2 : 1,
@@ -224,7 +224,7 @@ export default function HTML5Player({
       {/* ── Persistent DOM Slot B (<16ms single-frame z-index swap) ──────── */}
       <video
         ref={playerBRef}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-contain bg-black"
         style={{
           opacity: isEmbedFallback ? 0 : 1,
           zIndex: opacity.B === 1 ? 2 : 1,
@@ -292,35 +292,39 @@ export default function HTML5Player({
         </div>
       )}
 
-      {/* ── Muted notice — shown until first click unlocks Web Audio DSP ─── */}
+      {/* ── Muted notice — subtle corner badge so center/subtitles stay clear ─── */}
       {playerState.isMuted &&
         playerState.status === "playing" &&
         !showControls && (
           <div
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+            className="absolute bottom-2.5 right-2.5 z-30 pointer-events-none"
             style={{
-              background: "rgba(0,0,0,0.6)",
-              border: "1px solid rgba(0,243,255,0.2)",
-              borderRadius: 4,
-              padding: "3px 8px",
+              background: "rgba(0,0,0,0.68)",
+              border: "1px solid rgba(255,255,255,0.22)",
+              borderRadius: 3,
+              padding: "2px 7px",
             }}
           >
             <p
-              className="font-[family-name:var(--font-chat)] tracking-wider whitespace-nowrap"
+              className="font-mono uppercase tracking-wider whitespace-nowrap"
               style={{
-                fontSize: "clamp(6px,0.6vw,8px)",
-                color: "rgba(0,243,255,0.55)",
+                fontSize: "9.5px",
+                color: "rgba(255,255,255,0.82)",
               }}
             >
-              click to unmute
+              🔇 click video for audio
             </p>
           </div>
         )}
 
-      {/* ── Top-Right Live X-Ray Region & Forensic Loupe Trigger Pill ────── */}
+      {/* ── Top-Right Live X-Ray Region & Forensic Loupe Trigger Pill (Hover or Hold only so first load is unobstructed) ── */}
       {playerState.current && !forensicOpen && (
         <div
-          className="absolute top-2.5 right-2.5 z-40 flex items-center gap-1.5"
+          className="absolute top-2.5 right-2.5 z-40 flex items-center gap-1.5 transition-opacity duration-200"
+          style={{
+            opacity: showControls || isForensicHold ? 1 : 0,
+            pointerEvents: showControls || isForensicHold ? "auto" : "none",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {activeCue && (
