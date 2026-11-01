@@ -35,12 +35,6 @@ const VolumeIcon = () => (
     <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
   </svg>
 );
-const SkipIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M2 3L10 8L2 13V3Z" />
-    <rect x="11" y="3" width="3" height="10" rx="1" />
-  </svg>
-);
 
 export interface HTML5PlayerProps extends UseSeamlessPlayerOptions {
   onItemChange?: (item: VideoItem | null) => void;
@@ -72,7 +66,6 @@ export default function HTML5Player({
     slotBHandlers,
     toggleMute,
     setVolume,
-    skipToNext,
     togglePlay,
   } = useSeamlessPlayer({
     syncedCurrent,
@@ -361,31 +354,6 @@ export default function HTML5Player({
               {playerState.current.platformIcon} {playerState.current.platform}
             </span>
           )}
-
-          {/* next clip button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              skipToNext();
-            }}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: "2px",
-              color: "rgba(255,255,255,0.55)",
-            }}
-            className="hover:text-[#ff007f] transition-colors flex items-center gap-1"
-            title="Next clip"
-          >
-            <SkipIcon />
-            <span
-              className="font-[family-name:var(--font-display)] font-black tracking-wider uppercase"
-              style={{ fontSize: "clamp(5px,0.48vw,7px)" }}
-            >
-              NEXT
-            </span>
-          </button>
         </div>
       </div>
     </div>
