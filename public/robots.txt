@@ -1,0 +1,5 @@
+# LeonidaVice.com Robots
+User-agent: *
+Allow: /
+
+Sitemap: https://leonidavice.com/sitemap.xml

@@ -1,26 +1,247 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ── Global button/input reset: kill all browser-default focus rings & tap highlights ── */
+button, input {
+  -webkit-tap-highlight-color: transparent;
+}
+button:focus-visible {
+  outline: none;
+}
+button:focus {
+  outline: none;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@theme {
+  /* ── Vice City Core Palette ── */
+  --color-vice-pink: #ff007f;
+  --color-vice-cyan: #00f3ff;
+  --color-vice-purple: #2d004d;
+  --color-vice-deep-purple: #1a0033;
+  --color-vice-yellow: #ffdd00;
+  --color-neon-green: #00ff66;
+  --color-vice-orange: #ff6b00;
+  --color-vice-magenta: #ff00ff;
+
+  /* ── Surface Colors ── */
+  --color-surface-dark: #0a0014;
+  --color-surface-card: rgba(13, 0, 26, 0.85);
+  --color-surface-glass: rgba(0, 243, 255, 0.05);
+  --color-surface-input: rgba(45, 0, 77, 0.6);
+
+  /* ── Neon Glows (box-shadow values) ── */
+  --shadow-neon-pink: 0 0 10px #ff007f, 0 0 20px #ff007f, 0 0 40px #ff007f;
+  --shadow-neon-cyan: 0 0 10px #00f3ff, 0 0 20px #00f3ff, 0 0 40px #00f3ff;
+  --shadow-neon-yellow: 0 0 10px #ffdd00, 0 0 20px #ffdd00, 0 0 40px #ffdd00;
+  --shadow-crt-glow: inset 0 0 15px rgba(0, 243, 255, 0.3);
+  --shadow-marquee: 0 0 25px rgba(255, 0, 127, 0.5), inset 0 0 15px rgba(0, 0, 0, 0.9);
+
+  /* ── Typography ── */
+  --font-display: "Orbitron", sans-serif;
+  --font-body: "Share Tech Mono", monospace;
+  --font-chat: "VT323", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Global Reset & Base ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-vice-pink) var(--color-vice-deep-purple);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-surface-dark);
+  color: #e0e0e0;
+  font-family: var(--font-body);
+  overflow-x: hidden;
+}
+
+/* ── CRT Scanline Overlay ── */
+.crt-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: linear-gradient(
+      rgba(18, 16, 16, 0) 50%,
+      rgba(0, 0, 0, 0.25) 50%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 0, 0, 0.02),
+      rgba(0, 255, 0, 0.01),
+      rgba(0, 0, 255, 0.02)
+    );
+  background-size: 100% 3px, 4px 100%;
+}
+
+/* ── CRT Flicker ── */
+.crt-flicker {
+  animation: crt-flicker 8s infinite;
+}
+
+@keyframes crt-flicker {
+  0%,  100% { opacity: 1;    }
+  92%        { opacity: 1;    }
+  93%        { opacity: 0.82; }
+  94%        { opacity: 1;    }
+  96%        { opacity: 0.88; }
+  97%        { opacity: 1;    }
+}
+
+/* ── Neon Text Glow ── */
+.neon-text-pink {
+  text-shadow:
+    0 0 5px #fff,
+    0 0 10px #ff007f,
+    0 0 20px #ff007f,
+    0 0 40px #ff007f;
+}
+
+.neon-text-cyan {
+  text-shadow:
+    0 0 5px #fff,
+    0 0 10px #00f3ff,
+    0 0 20px #00f3ff,
+    0 0 40px #00f3ff;
+}
+
+.neon-text-yellow {
+  text-shadow:
+    0 0 5px #fff,
+    0 0 10px #ffdd00,
+    0 0 20px #ffdd00;
+}
+
+/* ── Neon Border Pulse ── */
+.neon-border-pink {
+  border: 2px solid var(--color-vice-pink);
+  box-shadow: var(--shadow-neon-pink);
+  animation: neon-pulse-pink 2s ease-in-out infinite alternate;
+}
+
+@keyframes neon-pulse-pink {
+  from { box-shadow: 0 0 5px #ff007f, 0 0 10px #ff007f, 0 0 20px #ff007f; }
+  to { box-shadow: 0 0 10px #ff007f, 0 0 25px #ff007f, 0 0 50px #ff007f, 0 0 80px #ff007f; }
+}
+
+.neon-border-cyan {
+  border: 2px solid var(--color-vice-cyan);
+  box-shadow: var(--shadow-neon-cyan);
+  animation: neon-pulse-cyan 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes neon-pulse-cyan {
+  from { box-shadow: 0 0 5px #00f3ff, 0 0 10px #00f3ff, 0 0 20px #00f3ff; }
+  to { box-shadow: 0 0 10px #00f3ff, 0 0 25px #00f3ff, 0 0 50px #00f3ff, 0 0 80px #00f3ff; }
+}
+
+/* ── Glass Panel ── */
+.glass-panel {
+  background: var(--color-surface-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 243, 255, 0.15);
+}
+
+/* ── Drive-In Screen Perspective ── */
+.drive-in-stage {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.drive-in-screen-frame {
+  transform: rotateX(2deg) rotateY(0deg) translateZ(10px);
+  box-shadow: var(--shadow-marquee);
+}
+
+/* ── Festoon String Lights ── */
+.festoon-lights {
+  background-image: radial-gradient(circle 3px, var(--color-vice-yellow) 100%, transparent 100%);
+  background-size: 40px 6px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 6px;
+  animation: twinkle 3s ease-in-out infinite alternate;
+}
+
+@keyframes twinkle {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* ── Stars Background ── */
+.stars {
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 30% 60%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 50% 10%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 70% 40%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 90% 80%, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1px 1px at 15% 75%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 45% 50%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 60% 90%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 80% 15%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 25% 35%, rgba(255, 255, 255, 0.8), transparent);
+  animation: star-twinkle 4s ease-in-out infinite alternate;
+}
+
+@keyframes star-twinkle {
+  0% { opacity: 0.8; }
+  100% { opacity: 1; }
+}
+
+/* ── Sky Gradient — Warmer Vice City sunset feel ── */
+.sky-gradient {
+  background: linear-gradient(
+    180deg,
+    #030012 0%,
+    #08001f 10%,
+    #120035 22%,
+    #1f0050 35%,
+    #2d0060 45%,
+    #3d1070 55%,
+    #4a1878 62%,
+    #3d1070 72%,
+    #2a0855 82%,
+    #1a0040 90%,
+    #0f0025 100%
+  );
+}
+
+/* ── Headlight beam animation ── */
+@keyframes headlight-flicker {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.9; }
+}
+
+.headlight-beam {
+  animation: headlight-flicker 3s ease-in-out infinite;
+}
+
+/* ── Screen glow cast on parking lot ── */
+@keyframes screen-glow-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.25; }
+}
+
+.screen-glow-cast {
+  animation: screen-glow-pulse 4s ease-in-out infinite;
+}
+
+/* ── Custom Scrollbar for Chat ── */
+.chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: var(--color-vice-deep-purple);
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-vice-pink);
+  border-radius: 3px;
+}
+
+/* ── Selection Color ── */
+::selection {
+  background: var(--color-vice-pink);
+  color: white;
 }

@@ -1,0 +1,12 @@
+# LeonidaVice Crawler — Python dependencies
+# Run from project root: pip install -r crawler/requirements.txt
+
+requests>=2.31.0
+yt-dlp>=2024.11.04
+python-dotenv>=1.0.0
+
+# Supabase Python client (used by supabase_setup.py)
+supabase>=2.0.0
+
+# Optional — for VLM content filter Phase 2
+# google-generativeai>=0.8.0
