@@ -57,11 +57,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, refreshed: 0, message: "All manifests fresh." });
     }
 
-    // If a crawler webhook is configured, forward the IDs there
-    const webhookUrl = process.env.CRAWLER_WEBHOOK_URL;
-    if (webhookUrl) {
+    // Check for Vercel service binding first, fallback to CRAWLER_WEBHOOK_URL
+    const crawlerBaseUrl = process.env.CRAWLER_SERVICE_URL || process.env.CRAWLER_WEBHOOK_URL;
+    if (crawlerBaseUrl) {
       const ids = stale.map((r: { id: string }) => r.id);
-      await fetch(`${webhookUrl}/refresh`, {
+      const refreshUrl = new URL("refresh", crawlerBaseUrl.endsWith("/") ? crawlerBaseUrl : `${crawlerBaseUrl}/`);
+      await fetch(refreshUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         ok: true,
         dispatched: ids.length,
-        message: `Dispatched ${ids.length} IDs to crawler webhook.`,
+        message: `Dispatched ${ids.length} IDs to crawler service.`,
       });
     }
 

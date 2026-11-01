@@ -1,4 +1,23 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "crawler",
+          "format": "url",
+          "env": "CRAWLER_SERVICE_URL"
+        }
+      ]
+    },
+    "crawler": {
+      "root": "crawler",
+      "runtime": "python"
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/aggregate",
@@ -7,6 +26,14 @@
     {
       "path": "/api/cron/refresh",
       "schedule": "*/90 * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
     }
   ]
 }

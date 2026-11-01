@@ -61,6 +61,21 @@ export async function GET(request: Request) {
       error_log: null,
     });
 
+    // Trigger crawl run on the crawler service if bound via Vercel services
+    const crawlerBaseUrl = process.env.CRAWLER_SERVICE_URL;
+    if (crawlerBaseUrl) {
+      try {
+        const crawlUrl = new URL("crawl", crawlerBaseUrl.endsWith("/") ? crawlerBaseUrl : `${crawlerBaseUrl}/`);
+        await fetch(crawlUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platforms: ["archive", "peertube"] }),
+        });
+      } catch (err) {
+        console.error("[aggregate-cron] crawler dispatch error:", err);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       message: "Cron tick complete",
