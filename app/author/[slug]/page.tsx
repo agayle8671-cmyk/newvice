@@ -1,8 +1,9 @@
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { AUTHORS } from "@/lib/newspaper/categories";
 import { AuthorArchiveView } from "@/components/newspaper/StaticPagesView";
+
+export const instant = false;
 
 export function generateStaticParams() {
   return AUTHORS.map((a) => ({ slug: a.slug }));
@@ -22,7 +23,7 @@ export async function generateMetadata({
   };
 }
 
-async function AuthorContent({
+export default async function AuthorRoute({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -31,16 +32,4 @@ async function AuthorContent({
   const author = AUTHORS.find((a) => a.slug === slug);
   if (!author) notFound();
   return <AuthorArchiveView author={author} />;
-}
-
-export default function AuthorRoute({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-white" />}>
-      <AuthorContent params={params} />
-    </Suspense>
-  );
 }

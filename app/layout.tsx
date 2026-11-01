@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth/context";
+import RouteProgressBar from "@/components/RouteProgressBar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -80,7 +82,12 @@ export default function RootLayout({
           color: "var(--np-ink, #111111)",
         }}
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <Suspense fallback={null}>
+            <RouteProgressBar />
+          </Suspense>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

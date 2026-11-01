@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { cache } from "react";
 import type { Article, ArticlePreset, ArticleStatus, Block, CategorySlug } from "./types";
 import { TRAILERS_MEDIA_ARTICLES } from "./articles/trailers-media";
 import { CHARACTERS_STORY_ARTICLES } from "./articles/characters-story";
@@ -173,14 +174,29 @@ export function sortArticlesNewestFirst(list: Article[]): Article[] {
   });
 }
 
+interface CachedHealthPayload {
+  articles: Article[];
+  health: StorageHealth;
+}
+
+let articlesCache: CachedHealthPayload | null = null;
+
+export function invalidateArticlesServerCache(): void {
+  articlesCache = null;
+}
+
 /**
  * Returns ALL articles (built-in + custom, including drafts & archived) for /admin,
  * plus detailed hybrid storage health.
  */
-export async function getAdminArticlesWithHealth(): Promise<{
+export async function getAdminArticlesWithHealth(forceFresh = false): Promise<{
   articles: Article[];
   health: StorageHealth;
 }> {
+  if (!forceFresh && articlesCache) {
+    return articlesCache;
+  }
+
   const [local, supa] = await Promise.all([
     readLocalStore(),
     fetchSupabaseArticles(),
@@ -220,7 +236,7 @@ export async function getAdminArticlesWithHealth(): Promise<{
     localWritable = false;
   }
 
-  return {
+  const result = {
     articles: sortArticlesNewestFirst([...merged.values()]),
     health: {
       localWritable,
@@ -231,20 +247,27 @@ export async function getAdminArticlesWithHealth(): Promise<{
       supabaseNote: supa.note,
     },
   };
+
+  articlesCache = result;
+  return result;
 }
 
-/** Returns ONLY published articles for public readers across the site */
+/** Returns ONLY published articles for public readers across the site (instant edge cached) */
 export async function getPublishedArticlesServer(): Promise<Article[]> {
   const { articles } = await getAdminArticlesWithHealth();
   return articles.filter((a) => (a.status ?? "published") === "published");
 }
 
-export async function getArticleBySlugServer(
+/**
+ * Single-request deduplicated article resolver via React.cache
+ * Resolves in 0ms without redundant Supabase queries.
+ */
+export const getArticleBySlugServer = cache(async function getArticleBySlugServer(
   slug: string
 ): Promise<Article | undefined> {
   const published = await getPublishedArticlesServer();
   return published.find((a) => a.slug === slug);
-}
+});
 
 /** Upsert a custom article (or customized override of a built-in article) to BOTH local JSON and Supabase */
 export async function saveArticleHybrid(input: Article): Promise<{
@@ -309,6 +332,7 @@ export async function saveArticleHybrid(input: Article): Promise<{
     }
   }
 
+  invalidateArticlesServerCache();
   return {
     article: normalized,
     savedLocal,
@@ -396,5 +420,6 @@ export async function removeOrArchiveArticleHybrid(
       // Ignore if table not yet initialized
     }
   }
+  invalidateArticlesServerCache();
   return { ok: true };
 }

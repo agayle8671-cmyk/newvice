@@ -1,8 +1,9 @@
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { CATEGORIES, getCategory } from "@/lib/newspaper/categories";
 import CategoryPageView from "@/components/newspaper/CategoryPageView";
+
+export const instant = false;
 
 export function generateStaticParams() {
   return CATEGORIES.map((c) => ({ slug: c.slug }));
@@ -22,7 +23,7 @@ export async function generateMetadata({
   };
 }
 
-async function CategoryContent({
+export default async function CategoryRoute({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -31,16 +32,4 @@ async function CategoryContent({
   const category = getCategory(slug);
   if (!category) notFound();
   return <CategoryPageView category={category} />;
-}
-
-export default function CategoryRoute({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-white" />}>
-      <CategoryContent params={params} />
-    </Suspense>
-  );
 }

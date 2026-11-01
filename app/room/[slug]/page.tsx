@@ -1,9 +1,6 @@
-import { Suspense } from "react";
-import { connection } from "next/server";
 import type { Metadata } from "next";
 import HomeClient from "@/components/HomeClient";
 
-// Allow blocking prerender for this dynamic route
 export const instant = false;
 
 interface RoomPageProps {
@@ -25,7 +22,6 @@ export async function generateMetadata({
 }
 
 async function RoomLoader({ slug }: { slug: string }) {
-  await connection();
 
   let roomTitle = slug
     .replace(/-/g, " ")
@@ -64,21 +60,5 @@ async function RoomLoader({ slug }: { slug: string }) {
 
 export default async function RoomPage({ params }: RoomPageProps) {
   const { slug } = await params;
-
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen w-full bg-white text-black flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-8 h-8 border-2 border-[#e04040] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-xs uppercase tracking-widest font-bold text-black/70">
-              Loading Live Broadcast...
-            </p>
-          </div>
-        </div>
-      }
-    >
-      <RoomLoader slug={slug} />
-    </Suspense>
-  );
+  return <RoomLoader slug={slug} />;
 }
