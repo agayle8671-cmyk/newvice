@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useAuth } from "@/lib/auth/context";
 import AuthModal from "@/components/auth/AuthModal";
 import ProfileModal from "@/components/profile/ProfileModal";
+import SubmitClipModal from "@/components/drive-in/SubmitClipModal";
 import VideoEngine from "@/components/video-engine/VideoEngine";
 import NowPlaying from "@/components/video-engine/NowPlaying";
 import { filterMessage } from "@/lib/moderation/filter";
@@ -78,6 +79,7 @@ export default function HomeClient({
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [inputFocused, setInputFocused] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [currentVideoItem, setCurrentVideoItem] = useState<import("@/lib/video/types").VideoItem | null>(null);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -306,6 +308,14 @@ export default function HomeClient({
     <div className="relative w-screen h-screen bg-[#020008] flex items-center justify-center overflow-hidden select-none">
       <AuthModal />
       <ProfileModal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)} />
+      <SubmitClipModal
+        isOpen={showSubmitModal}
+        onClose={() => setShowSubmitModal(false)}
+        defaultCreatorName={currentUsername}
+        onClipSubmitted={(clipTitle, creator) => {
+          handleSendMessage(`🎬 New community stunt submitted: "${clipTitle}" by ${creator}! Queued on screen.`);
+        }}
+      />
 
       {/* ══════════════════════════════════════════════════════════════════
           MAIN CANVAS — locked to 1408:768 aspect ratio.
@@ -355,6 +365,15 @@ export default function HomeClient({
             title="Toggle screen"
           >
             {isVideoPlaying ? "📺 LIVE" : "🖼️ ART"}
+          </button>
+          <button
+            onClick={() => setShowSubmitModal(true)}
+            className="bg-black/70 border border-[#ff007f]/50 hover:border-[#ff007f] rounded-full px-2.5 py-0.5 text-[#ff007f] hover:text-white hover:bg-[#ff007f]/20 transition-all font-[family-name:var(--font-chat)] flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,127,0.25)]"
+            style={{ fontSize: "clamp(7px,0.75vw,10px)" }}
+            title="Submit your GTA VI stunt clip to play on screen"
+          >
+            <span>🎬</span>
+            <span>SUBMIT CLIP</span>
           </button>
           <button
             onClick={() => setShowProfileModal(true)}

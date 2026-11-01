@@ -46,14 +46,42 @@ def get_logger(name: str) -> logging.Logger:
     )
     return logging.getLogger(name)
 
+# ─── Launch Phase & Date Boundary ─────────────────────────────────────────────
+# Automatically switches or can be forced via GTA6_LAUNCH_MODE=true
+# Once GTA 6 is out, all speculation, leak, and pre-launch rumor content is discarded.
+GTA6_LAUNCH_DATE = os.environ.get("GTA6_LAUNCH_DATE", "2025-10-01T00:00:00Z")
+GTA6_LAUNCH_MODE = os.environ.get("GTA6_LAUNCH_MODE", "false").lower() in ("true", "1", "yes")
+
+def is_post_launch() -> bool:
+    """True if launch mode is explicitly enabled or today is past the release date."""
+    if GTA6_LAUNCH_MODE:
+        return True
+    try:
+        launch_dt = datetime.fromisoformat(GTA6_LAUNCH_DATE.replace("Z", "+00:00"))
+        return datetime.now(timezone.utc) >= launch_dt
+    except Exception:
+        return False
+
 # ─── Keyword & English filter ─────────────────────────────────────────────────
 GTA6_TITLE_REGEX = re.compile(
-    r"\b(gta\s*6|gta\s*vi|gtavi|gta6|grand\s+theft\s+auto\s*(6|vi)|leonida|lucia|jason\s+gta)\b",
+    r"\b(gta\s*6|gta\s*vi|gtavi|gta6|grand\s+theft\s+auto\s*(6|vi)|leonida|lucia|jason\s+gta|vice\s*city\s*online)\b",
     re.IGNORECASE,
 )
 
 REJECT_TOPIC_REGEX = re.compile(
     r"\b(minecraft|fortnite|roblox|valorant|warzone|call\s+of\s+duty|apex\s+legends|genshin|gta\s*sa|san\s+andreas|gta\s*iv|gta\s*4|gta\s*3|gta\s*iii)\b",
+    re.IGNORECASE,
+)
+
+# Post-launch strict banlist: eliminate all pre-launch leaks, rumors, speculations, wishlists
+POST_LAUNCH_REJECT_REGEX = re.compile(
+    r"\b(leak|leaks|leaked|speculation|speculate|rumor|rumors|rumour|rumours|theory|theories|wishlist|concept\s*trailer|fan\s*trailer|trailer\s*breakdown|trailer\s*analysis|trailer\s*reaction|when\s*will\s*gta\s*6|release\s*date\s*rumor|what\s*to\s*expect|before\s*you\s*buy|countdown|delay\s*rumor|fake\s*leak)\b",
+    re.IGNORECASE,
+)
+
+# User gameplay clips & cool moments keywords
+GAMEPLAY_CLIP_REGEX = re.compile(
+    r"\b(gameplay|clip|stunt|drift|pursuit|police\s*chase|wanted|busted|fails|funny\s*moments|insane|physics|easter\s*egg|secret|glitch|mod|speedrun|heist|rampage|custom|customization|killcam|highlight|clutch|shootout|free\s*roam)\b",
     re.IGNORECASE,
 )
 
@@ -68,12 +96,15 @@ NON_ENGLISH_WORDS_REGEX = re.compile(
     re.IGNORECASE,
 )
 
-def passes_filter(title: str, description: str = "") -> tuple[bool, str]:
+def passes_filter(title: str, description: str = "", uploaded_at: Optional[str] = None) -> tuple[bool, str]:
     """
     Strict filter:
     1. Title must explicitly contain a GTA VI keyword.
     2. Must be English only (no foreign script, no foreign stopwords).
     3. Must not be about other games (GTA SA, GTA IV, Fortnite, etc.).
+    4. Post-launch mode:
+       - Strictly rejects obsolete leaks, rumors, wishlists, speculation, trailer breakdowns.
+       - Discards any video uploaded prior to the official game release date.
     """
     if not title:
         return False, "missing title"
@@ -94,6 +125,22 @@ def passes_filter(title: str, description: str = "") -> tuple[bool, str]:
     text = (title + " " + (description[:300] if description else "")).lower()
     if REJECT_TOPIC_REGEX.search(text):
         return False, "rejected non-GTA6 topic"
+
+    # ── Post-Launch Gameplay Enforcement ──
+    if is_post_launch():
+        # Discard any obsolete leak/rumor/speculation keywords
+        if POST_LAUNCH_REJECT_REGEX.search(text):
+            return False, "obsolete pre-launch speculation or leak content"
+
+        # Discard videos uploaded before the launch date cutoff
+        if uploaded_at:
+            try:
+                up_dt = datetime.fromisoformat(uploaded_at.replace("Z", "+00:00"))
+                launch_dt = datetime.fromisoformat(GTA6_LAUNCH_DATE.replace("Z", "+00:00"))
+                if up_dt < launch_dt:
+                    return False, f"uploaded before launch date ({uploaded_at} < {GTA6_LAUNCH_DATE})"
+            except Exception:
+                pass
 
     return True, "ok"
 

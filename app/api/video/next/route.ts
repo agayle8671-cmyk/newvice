@@ -113,6 +113,20 @@ export async function GET(request: Request) {
         return GET(request); // fetch next English video
       }
 
+      // Safeguard: Launch Day / Post-Launch mode
+      // Drops obsolete pre-launch speculation, leaks, and trailer breakdowns
+      if (isPostLaunchMode()) {
+        const isObsolete = POST_LAUNCH_REJECT_REGEX.test(row.title) ||
+          (row.uploaded_at && new Date(row.uploaded_at).getTime() < new Date(process.env.GTA6_LAUNCH_DATE || "2025-10-01T00:00:00Z").getTime());
+        if (isObsolete) {
+          await supabase
+            .from("video_catalog")
+            .update({ is_active: false, source_category: "pre_launch_archive" })
+            .eq("id", row.id);
+          return GET(request); // fetch next active gameplay video
+        }
+      }
+
       // Record play
       await supabase.from("video_session_plays").upsert({
         session_id: sessionId,
@@ -195,4 +209,17 @@ function isEnglishTitle(title: string): boolean {
     return false;
   }
   return true;
+}
+
+const POST_LAUNCH_REJECT_REGEX = /\b(leak|leaks|leaked|speculation|speculate|rumor|rumors|rumour|rumours|theory|theories|wishlist|concept\s*trailer|fan\s*trailer|trailer\s*breakdown|trailer\s*analysis|trailer\s*reaction|when\s*will\s*gta\s*6|release\s*date\s*rumor|what\s*to\s*expect|before\s*you\s*buy|countdown|delay\s*rumor|fake\s*leak)\b/i;
+
+function isPostLaunchMode(): boolean {
+  if (process.env.GTA6_LAUNCH_MODE === "true") return true;
+  const launchDateStr = process.env.GTA6_LAUNCH_DATE;
+  if (!launchDateStr) return false;
+  try {
+    return Date.now() >= new Date(launchDateStr).getTime();
+  } catch {
+    return false;
+  }
 }
