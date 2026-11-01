@@ -2,10 +2,16 @@ import {
   Server,
   routePartykitRequest,
   type Connection,
-  type ConnectionContext,
   type WSMessage,
 } from "partyserver";
-import type { VideoItem, VideoCategory, VideoSource } from "../../lib/video/types";
+import type { VideoItem } from "../../lib/video/types";
+import {
+  DEFAULT_CLIP_DURATION_SEC,
+  filterCatalogRows,
+  rowToVideoItem,
+  type CatalogRow,
+} from "../../lib/video/catalog";
+import { fetchAllowedMedia, parseAllowedMediaUrl } from "../../lib/video/media-hosts";
 import type {
   ClientToServerMessage,
   LotRow,
@@ -22,6 +28,8 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   SUPABASE_ANON_KEY?: string;
+  GTA6_LAUNCH_DATE?: string;
+  GTA6_LAUNCH_MODE?: string;
 }
 
 interface PersistedRoomState {
@@ -34,110 +42,16 @@ interface PersistedRoomState {
   recentChat: SyncedChatMessage[];
 }
 
-interface CatalogRow {
-  id: string;
-  source_platform: string;
-  canonical_url: string;
-  youtube_id?: string | null;
-  manifest_url?: string | null;
-  direct_mp4_url?: string | null;
-  title: string;
-  creator_name: string;
-  creator_url?: string | null;
-  creator_avatar?: string | null;
-  thumbnail_url?: string | null;
-  duration_sec?: number | null;
-  view_count?: number | null;
-  source_category?: string | null;
-  fetched_at: string;
-  play_count?: number | null;
-  scout_name?: string | null;
-  viral_heat_score?: number | null;
-  high_beam_count?: number | null;
-  perceptual_hash?: string | null;
-}
-
-const DEFAULT_CLIP_DURATION_SEC = 75;
 const CATALOG_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // Refresh catalog from Supabase every 5 min
 const SUPABASE_ALARM_FLUSH_MS = 30 * 1000;         // Batch DB writes every 30s (99% write reduction)
 const DELTA_BATCH_INTERVAL_MS = 100;               // Aggregate crowd deltas over 100ms intervals
+const CHAT_MIN_INTERVAL_MS = 700;                  // Per-connection chat flood control
+const REACTION_MIN_INTERVAL_MS = 120;              // Per-connection flash/hazard flood control
+const HORN_MIN_INTERVAL_MS = 1500;                 // Horns are loud — rate-limit harder
 
 // Parking grid topology (Row A = Front Row Streak/Scouts, Row B = Crew Lot, Row C = General Admission)
 const ROW_CAPACITIES: Record<LotRow, number> = { A: 6, B: 8, C: 10 };
 const ROW_DEPTH: Record<LotRow, number> = { A: 0.22, B: 0.52, C: 0.82 };
-
-// Allowlisted domains for the zero-egress edge byte-range CORS media streamer
-const ALLOWED_MEDIA_HOSTS = [
-  "archive.org",
-  "streamable.com",
-  "mux.dev",
-  "medal.tv",
-  "redd.it",
-  "redditmedia.com",
-  "peertube",
-  "odysee.com",
-  "lbryplayer.xyz",
-  "rumble.com",
-  "kick.com",
-  "dailymotion.com",
-  "vimeo.com",
-  "imgur.com",
-  "coub.com",
-  "supabase.co",
-  "bitchute.com",
-  "twimg.com",
-  "hdslb.com",
-  "vkuser",
-];
-
-function platformIcon(platform: string): string {
-  const map: Record<string, string> = {
-    kick: "🟩",
-    rumble: "🟧",
-    dailymotion: "🟦",
-    peertube: "🐘",
-    odyssee: "🔵",
-    archive: "📦",
-    reddit: "🟥",
-    bilibili: "💙",
-    vimeo: "🎞️",
-    vk: "💬",
-    nicovideo: "🇯🇵",
-    medal: "🏅",
-    streamable: "⚡",
-    youtube: "▶️",
-    community: "🎬",
-    direct: "🎬",
-  };
-  return map[platform?.toLowerCase()] ?? "🎬";
-}
-
-function rowToVideoItem(row: CatalogRow): VideoItem {
-  return {
-    id: row.id,
-    source: (row.source_platform || "direct") as VideoSource,
-    manifestUrl: row.manifest_url ?? undefined,
-    directMp4Url: row.direct_mp4_url ?? undefined,
-    youtubeId: row.youtube_id ?? undefined,
-    title: row.title,
-    creatorName: row.creator_name || "Unknown",
-    creatorUrl: row.creator_url ?? row.canonical_url ?? "",
-    creatorAvatar: row.creator_avatar ?? undefined,
-    platform: row.source_platform || "archive",
-    platformIcon: platformIcon(row.source_platform),
-    sourceUrl: row.canonical_url,
-    thumbnail: row.thumbnail_url ?? undefined,
-    durationSec: row.duration_sec && row.duration_sec > 5 ? row.duration_sec : undefined,
-    category: (row.source_category || "gameplay") as VideoCategory,
-    viewCount: row.view_count ?? undefined,
-    scoutName: row.scout_name ?? undefined,
-    viralHeatScore: row.viral_heat_score ?? undefined,
-    highBeamCount: row.high_beam_count ?? undefined,
-    perceptualHash: row.perceptual_hash ?? undefined,
-    fetchedAt: row.fetched_at,
-    playCount: row.play_count ?? 0,
-  };
-}
 
 const FALLBACK_PLAYLIST: VideoItem[] = [
   {
@@ -234,19 +148,23 @@ export class DriveInRoomServer extends Server<Env> {
       });
       if (res.ok) {
         const rows = (await res.json()) as CatalogRow[];
-        const items = rows
-          .map(rowToVideoItem)
-          .filter((v) => Boolean(v.directMp4Url || v.manifestUrl || v.youtubeId));
+        // Shared gate: English-only + Launch-Day post-launch filter (leaks/speculation/pre-launch uploads)
+        const items = filterCatalogRows(rows, {
+          GTA6_LAUNCH_DATE: this.env.GTA6_LAUNCH_DATE,
+          GTA6_LAUNCH_MODE: this.env.GTA6_LAUNCH_MODE,
+        }).map(rowToVideoItem);
         if (items.length > 0) {
           // Preserve currently playing video identity across catalog refreshes
           const activeId = this.currentItem?.id;
           this.playlist = items;
-          if (activeId) {
-            const idx = this.playlist.findIndex((i) => i.id === activeId);
-            this.currentIndex = idx >= 0 ? idx : 0;
+          const idx = activeId ? this.playlist.findIndex((i) => i.id === activeId) : -1;
+          if (idx >= 0) {
+            this.currentIndex = idx;
           } else {
+            // Active clip was retired (e.g. launch-day filter) or first load: restart cleanly
             this.currentIndex = 0;
             this.clipStartTimestamp = now;
+            this.encoreTriggered = false;
           }
           this.lastCatalogFetchMs = now;
         }
@@ -316,8 +234,28 @@ export class DriveInRoomServer extends Server<Env> {
 
   private getConnectionCount(): number {
     let count = 0;
-    for (const _ of this.getConnections()) count++;
+    for (const conn of this.getConnections()) {
+      void conn;
+      count++;
+    }
     return count;
+  }
+
+  // Per-connection flood control (in-memory; resets on hibernation which is acceptable)
+  private lastActionAt = new Map<string, number>();
+
+  private rateLimited(connectionId: string, action: string, minIntervalMs: number): boolean {
+    const key = `${connectionId}:${action}`;
+    const now = Date.now();
+    const last = this.lastActionAt.get(key) ?? 0;
+    if (now - last < minIntervalMs) return true;
+    this.lastActionAt.set(key, now);
+    if (this.lastActionAt.size > 2000) {
+      for (const [k, t] of this.lastActionAt) {
+        if (now - t > 60_000) this.lastActionAt.delete(k);
+      }
+    }
+    return false;
   }
 
   private computeTallies(vehicles?: RoomVehiclePresence[]): ReactionTallies {
@@ -443,7 +381,7 @@ export class DriveInRoomServer extends Server<Env> {
   }
 
   // ── WebSocket Handlers ─────────────────────────────────────────────────────
-  async onConnect(connection: Connection<RoomVehiclePresence>, _ctx: ConnectionContext): Promise<void> {
+  async onConnect(connection: Connection<RoomVehiclePresence>): Promise<void> {
     await this.ensureCatalogFresh();
     this.fastForwardClockIfNeeded();
 
@@ -552,6 +490,7 @@ export class DriveInRoomServer extends Server<Env> {
       }
 
       case "CAR_FLASH": {
+        if (this.rateLimited(connection.id, "flash", REACTION_MIN_INTERVAL_MS)) return;
         const prev = connection.state as RoomVehiclePresence | null;
         if (!prev) return;
         const nextActive = Boolean(msg.active);
@@ -593,6 +532,7 @@ export class DriveInRoomServer extends Server<Env> {
       }
 
       case "CAR_HAZARD": {
+        if (this.rateLimited(connection.id, "hazard", REACTION_MIN_INTERVAL_MS)) return;
         const prev = connection.state as RoomVehiclePresence | null;
         if (!prev) return;
         const nextHazard = Boolean(msg.active);
@@ -617,6 +557,7 @@ export class DriveInRoomServer extends Server<Env> {
       }
 
       case "CAR_HORN": {
+        if (this.rateLimited(connection.id, "horn", HORN_MIN_INTERVAL_MS)) return;
         const prev = connection.state as RoomVehiclePresence | null;
         if (!prev) return;
         const panX = Number(((prev.xPct - 0.5) * 2).toFixed(3)); // -1 (far left) .. +1 (far right)
@@ -631,8 +572,12 @@ export class DriveInRoomServer extends Server<Env> {
       }
 
       case "CHAT_SEND": {
+        if (this.rateLimited(connection.id, "chat", CHAT_MIN_INTERVAL_MS)) return;
         const prev = connection.state as RoomVehiclePresence | null;
-        const content = (msg.content || "").trim().slice(0, 500);
+        const content = (msg.content || "")
+          .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+          .trim()
+          .slice(0, 500);
         if (!content) return;
 
         const chatMsg: SyncedChatMessage = {
@@ -690,7 +635,7 @@ export class DriveInRoomServer extends Server<Env> {
   }
 
   // ── HTTP Inspection Endpoint on the Room DO ────────────────────────────────
-  async onRequest(request: Request): Promise<Response> {
+  async onRequest(): Promise<Response> {
     await this.ensureCatalogFresh();
     this.fastForwardClockIfNeeded();
     const now = Date.now();
@@ -881,30 +826,36 @@ async function handleMediaProxy(request: Request): Promise<Response> {
     return Response.json({ error: "Missing url parameter" }, { status: 400 });
   }
 
-  let parsedTarget: URL;
-  try {
-    parsedTarget = new URL(target);
-  } catch {
-    return Response.json({ error: "Invalid url" }, { status: 400 });
-  }
-
-  const hostAllowed = ALLOWED_MEDIA_HOSTS.some(
-    (h) => parsedTarget.hostname === h || parsedTarget.hostname.endsWith(`.${h}`) || parsedTarget.hostname.includes(h)
-  );
-  if (!hostAllowed) {
-    return Response.json({ error: "Domain not in media allowlist" }, { status: 403 });
+  // https-only, strict dot-boundary host-suffix allowlist, no raw IPs/localhost
+  const parsedTarget = parseAllowedMediaUrl(target);
+  if (!parsedTarget) {
+    return Response.json({ error: "URL not permitted" }, { status: 403 });
   }
 
   const upstreamHeaders = new Headers();
   const range = request.headers.get("Range");
-  if (range) upstreamHeaders.set("Range", range);
+  if (range && /^bytes=\d*-\d*$/.test(range)) upstreamHeaders.set("Range", range);
   upstreamHeaders.set("User-Agent", "Mozilla/5.0 (compatible; LeonidaViceEdge/3.0)");
 
-  const upstream = await fetch(parsedTarget.toString(), {
-    method: request.method === "HEAD" ? "HEAD" : "GET",
-    headers: upstreamHeaders,
-    redirect: "follow",
-  });
+  let upstream: Response | null;
+  try {
+    // Every redirect hop is re-validated against the allowlist
+    upstream = await fetchAllowedMedia(parsedTarget, {
+      method: request.method === "HEAD" ? "HEAD" : "GET",
+      headers: upstreamHeaders,
+    });
+  } catch {
+    return Response.json({ error: "Upstream stream unreachable" }, { status: 502 });
+  }
+  if (!upstream) {
+    return Response.json({ error: "Upstream redirect not permitted" }, { status: 502 });
+  }
+
+  // Only relay actual media — never HTML/JSON pages from the upstream host
+  const contentType = upstream.headers.get("Content-Type") ?? "";
+  if (upstream.ok && !/^(video\/|audio\/|application\/(octet-stream|mp4|vnd\.apple\.mpegurl|x-mpegurl))/i.test(contentType)) {
+    return Response.json({ error: "Upstream is not a media resource" }, { status: 415 });
+  }
 
   const respHeaders = new Headers();
   for (const key of [
@@ -913,15 +864,16 @@ async function handleMediaProxy(request: Request): Promise<Response> {
     "Content-Range",
     "Accept-Ranges",
     "ETag",
-    "Cache-Control",
+    "Last-Modified",
   ]) {
     const val = upstream.headers.get(key);
     if (val) respHeaders.set(key, val);
   }
+  respHeaders.set("Cache-Control", "public, max-age=3600");
   respHeaders.set("Access-Control-Allow-Origin", "*");
   respHeaders.set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
 
-  return new Response(upstream.body, {
+  return new Response(request.method === "HEAD" ? null : upstream.body, {
     status: upstream.status,
     headers: respHeaders,
   });
@@ -929,7 +881,7 @@ async function handleMediaProxy(request: Request): Promise<Response> {
 
 // ─── Cloudflare Worker Fetch Entrypoint ──────────────────────────────────────
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {

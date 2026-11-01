@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { VideoItem } from "@/lib/video/types";
+import { safeHttpUrl } from "@/lib/security/url";
 import type { RoomSyncMode } from "@/lib/realtime/useDriveInRoom";
 
 interface NowPlayingProps {
@@ -11,6 +12,7 @@ interface NowPlayingProps {
 }
 
 export default function NowPlaying({ item, syncMode }: NowPlayingProps) {
+  const creatorHref = safeHttpUrl(item?.creatorUrl) ?? safeHttpUrl(item?.sourceUrl);
   // ── OS Media Session API (Lock-Screen / AirPods / CarPlay / Media Keys) ──
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
@@ -124,22 +126,35 @@ export default function NowPlaying({ item, syncMode }: NowPlayingProps) {
               by
             </span>
 
-            {/* Creator link */}
-            <a
-              href={item.creatorUrl || item.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 hover:underline pointer-events-auto"
-              style={{
-                fontSize: "clamp(7px,0.7vw,10px)",
-                fontFamily: "var(--font-chat)",
-                color: "#00f3ffaa",
-                textDecoration: "none",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {item.platformIcon} {item.creatorName}
-            </a>
+            {/* Creator link (http/https only) */}
+            {creatorHref ? (
+              <a
+                href={creatorHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 hover:underline pointer-events-auto"
+                style={{
+                  fontSize: "clamp(7px,0.7vw,10px)",
+                  fontFamily: "var(--font-chat)",
+                  color: "#00f3ffaa",
+                  textDecoration: "none",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {item.platformIcon} {item.creatorName}
+              </a>
+            ) : (
+              <span
+                className="shrink-0"
+                style={{
+                  fontSize: "clamp(7px,0.7vw,10px)",
+                  fontFamily: "var(--font-chat)",
+                  color: "#00f3ffaa",
+                }}
+              >
+                {item.platformIcon} {item.creatorName}
+              </span>
+            )}
 
             {/* Scout attribution if community-scouted */}
             {item.scoutName && (

@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
+import { connection } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 // ─── Manifest Refresh Cron ─────────────────────────────────────────────────────
-// Runs every 90 minutes via Vercel Cron.
-// Finds video_catalog rows whose manifest URLs are close to expiring
-// (manifest_refreshed_at older than 90 min) and calls yt-dlp via the
-// Python sidecar (or direct exec if available) to refresh them.
-//
-// On Vercel Edge, we can't shell out — so instead this route calls
-// the /api/cron/refresh/worker endpoint via a background fetch,
-// OR signals a Cloud Run / Fly.io sidecar if CRAWLER_WEBHOOK_URL is set.
-//
-// vercel.json cron: "*/90 * * * *"
+// Daily via Vercel Cron (Hobby plan limit). Finds video_catalog rows whose HLS
+// manifest URLs are stale (manifest_refreshed_at older than 90 min) and asks the
+// bound Python crawler service to re-resolve them via yt-dlp.
 
 export async function GET(request: Request) {
-  // Auth check
+  // Opt this handler out of build-time prerendering (cacheComponents) — it must run per request.
+  await connection();
+
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const authHeader = request.headers.get("authorization");
@@ -22,34 +19,26 @@ export async function GET(request: Request) {
     }
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-  const isLive = supabaseUrl.startsWith("https://") && supabaseKey.length > 10;
-
-  if (!isLive) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
     return NextResponse.json({
       ok: false,
-      message: "Demo mode — manifest refresh skipped.",
+      message: "Supabase service role not configured — manifest refresh skipped.",
     });
   }
 
   try {
-    const { createServerSupabaseClient } = await import("@/lib/supabase/server");
-    const supabase = await createServerSupabaseClient();
-
-    // Find videos that haven't had their manifest refreshed in the last 90 min
-    // and have a manifest_url that could expire (HLS/DASH streams)
     const ninetyMinAgo = new Date(Date.now() - 90 * 60 * 1000).toISOString();
 
     const { data: stale, error } = await supabase
       .from("video_catalog")
-      .select("id, canonical_url, source_platform, manifest_url")
+      .select("id")
       .eq("is_active", true)
       .eq("is_approved", true)
       .not("manifest_url", "is", null)
       .lt("manifest_refreshed_at", ninetyMinAgo)
       .order("manifest_refreshed_at", { ascending: true })
-      .limit(20); // process in batches of 20
+      .limit(20);
 
     if (error) throw error;
 
@@ -57,33 +46,40 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, refreshed: 0, message: "All manifests fresh." });
     }
 
-    // Check for Vercel service binding first, fallback to CRAWLER_WEBHOOK_URL
     const crawlerBaseUrl = process.env.CRAWLER_SERVICE_URL || process.env.CRAWLER_WEBHOOK_URL;
-    if (crawlerBaseUrl) {
-      const ids = stale.map((r: { id: string }) => r.id);
-      const refreshUrl = new URL("refresh", crawlerBaseUrl.endsWith("/") ? crawlerBaseUrl : `${crawlerBaseUrl}/`);
-      await fetch(refreshUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.CRAWLER_WEBHOOK_SECRET ?? ""}`,
-        },
-        body: JSON.stringify({ video_ids: ids }),
-      });
-
+    if (!crawlerBaseUrl) {
       return NextResponse.json({
         ok: true,
-        dispatched: ids.length,
-        message: `Dispatched ${ids.length} IDs to crawler service.`,
+        stale: stale.length,
+        message: `Found ${stale.length} stale manifests. Bind the crawler service (CRAWLER_SERVICE_URL) to auto-refresh.`,
       });
     }
 
-    // No webhook — mark them for crawler to pick up on next run
-    // (Python crawler checks manifest_refreshed_at < NOW() - 90min)
+    const ids = stale.map((r: { id: string }) => r.id);
+    const refreshUrl = new URL("refresh", crawlerBaseUrl.endsWith("/") ? crawlerBaseUrl : `${crawlerBaseUrl}/`);
+    const res = await fetch(refreshUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(process.env.CRAWLER_WEBHOOK_SECRET
+          ? { Authorization: `Bearer ${process.env.CRAWLER_WEBHOOK_SECRET}` }
+          : {}),
+      },
+      body: JSON.stringify({ video_ids: ids }),
+      signal: AbortSignal.timeout(50_000),
+    });
+
+    if (!res.ok) {
+      return NextResponse.json(
+        { ok: false, error: `Crawler service responded ${res.status}`, dispatched: 0 },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json({
       ok: true,
-      stale: stale.length,
-      message: `Found ${stale.length} stale manifests. Set CRAWLER_WEBHOOK_URL to auto-refresh.`,
+      dispatched: ids.length,
+      message: `Dispatched ${ids.length} IDs to crawler service.`,
     });
   } catch (err) {
     console.error("[refresh-cron] error:", err);

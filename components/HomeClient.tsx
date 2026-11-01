@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth/context";
+import { useGuestProfile } from "@/lib/profile/guest";
 import AuthModal from "@/components/auth/AuthModal";
 import ProfileModal from "@/components/profile/ProfileModal";
 import SubmitClipModal from "@/components/drive-in/SubmitClipModal";
@@ -14,8 +15,6 @@ import { useDriveInRoom } from "@/lib/realtime/useDriveInRoom";
 import { getDriveInAudioGraph } from "@/lib/audio/DriveInAudioGraph";
 import type { ChatMessage } from "@/lib/realtime/chat";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-
-const DEFAULT_VIDEO_ID = "QdBZY2fkU-0";
 
 // ─── QWERTY KEY POSITIONS (0..1 within the keyboard canvas area) ─────────────
 // x = horizontal fraction, y = row fraction
@@ -64,18 +63,13 @@ interface HomeClientProps {
 //  Popular topics panel  175, 242,  118, 135   12.43, 31.51,  8.38, 17.58
 //  JOIN button rect     1100, 326,   65,  30   78.13, 42.45,  4.62,  3.91
 
-export default function HomeClient({
-  roomSlug = "main-theater",
-  roomTitle,
-  videoId = DEFAULT_VIDEO_ID,
-}: HomeClientProps) {
+export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProps) {
   const { user, profile, isLoading, showAuthModal, setShowAuthModal, signOut } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Real presence arrives from Supabase / PartyServer; 24 is just the pre-connect placeholder.
   const [presenceCount, setPresenceCount] = useState(24);
-  const [isConnected, setIsConnected] = useState(false);
-  const [guestId, setGuestId] = useState("guest_loading");
-  const [guestName, setGuestName] = useState("User");
+  const guest = useGuestProfile();
   const [inputValue, setInputValue] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -89,10 +83,10 @@ export default function HomeClient({
   const [autoScroll, setAutoScroll] = useState(true);
 
   // Derived auth state — declared here so keyboard glow effects can reference them
-  const currentUserId = user ? user.id : guestId;
-  const currentUsername = profile?.username ?? guestName;
-  const currentBadge = profile?.vehicle_badge ?? "muscle_car";
-  const currentBadgeColor = profile?.badge_color ?? "#ff007f";
+  const currentUserId = user ? user.id : guest?.id ?? "guest_pending";
+  const currentUsername = profile?.username ?? guest?.username ?? "Driver";
+  const currentBadge = profile?.vehicle_badge ?? guest?.vehicle_badge ?? "muscle_car";
+  const currentBadgeColor = profile?.badge_color ?? guest?.badge_color ?? "#ff007f";
   const isAuthenticated = !!user;
 
   const appendUniqueMessage = useCallback((incoming: ChatMessage) => {
@@ -109,18 +103,6 @@ export default function HomeClient({
     username: currentUsername,
     vehicleType: currentBadge,
     badgeColor: currentBadgeColor,
-    onChatMessage: (synced) => {
-      appendUniqueMessage({
-        id: synced.id,
-        userId: synced.userId,
-        username: synced.username,
-        vehicleBadge: synced.vehicleBadge,
-        badgeColor: synced.badgeColor,
-        content: synced.content,
-        isAnnouncement: Boolean(synced.isAnnouncement),
-        createdAt: synced.createdAt,
-      });
-    },
     onHornTrigger: (_seatId, hornId, panX, zDepth) => {
       getDriveInAudioGraph().playSpatialHorn(hornId, panX, zDepth);
     },
@@ -152,11 +134,13 @@ export default function HomeClient({
     },
   });
 
-  // Hydrate recent room chat snapshot on Edge DO connect
-  useEffect(() => {
-    if (room.recentChat.length === 0) return;
+  // Chat shown = Supabase/fallback + system messages (local state) merged with the
+  // Edge Durable Object's authoritative room chat, de-duplicated and time-ordered.
+  const displayMessages = useMemo(() => {
+    const byId = new Map<string, ChatMessage>();
+    for (const m of messages) byId.set(m.id, m);
     for (const synced of room.recentChat) {
-      appendUniqueMessage({
+      byId.set(synced.id, {
         id: synced.id,
         userId: synced.userId,
         username: synced.username,
@@ -167,8 +151,21 @@ export default function HomeClient({
         createdAt: synced.createdAt,
       });
     }
-  }, [room.recentChat, appendUniqueMessage]);
+    return [...byId.values()]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(-150);
+  }, [messages, room.recentChat]);
 
+  // If the room coordinator can't be reached at all, fall back to the standalone queue
+  // after a grace period instead of leaving the screen on "TUNING IN" forever.
+  const [syncGaveUp, setSyncGaveUp] = useState(false);
+  useEffect(() => {
+    if (room.isSynced) return;
+    const t = setTimeout(() => setSyncGaveUp(true), 9000);
+    return () => clearTimeout(t);
+  }, [room.isSynced]);
+
+  const sendSyncedChat = room.sendSyncedChat;
   const displayedPresenceCount =
     room.syncMode === "partyserver" && room.vehicles.length > 0
       ? room.vehicles.length
@@ -264,12 +261,6 @@ export default function HomeClient({
   }, []);
 
   useEffect(() => {
-    const num = Math.floor(Math.random() * 899) + 100;
-    setGuestId(`guest_${num}`);
-    setGuestName(`User${num}`);
-  }, []);
-
-  useEffect(() => {
     if (autoScroll && chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
@@ -288,8 +279,8 @@ export default function HomeClient({
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
     const live = url.startsWith("https://") && key.length > 10;
 
-    setIsConnected(true);
-    setPresenceCount(Math.floor(Math.random() * 25) + 18);
+    // Wait until the persistent guest identity is ready so we subscribe exactly once per identity
+    if (!user && !guest) return;
 
     if (!live) {
       // DEMO MODE — zero network, zero Supabase, pure local React state.
@@ -322,7 +313,7 @@ export default function HomeClient({
           .catch(() => {});
       }
     };
-  }, [currentUserId, roomSlug]);
+  }, [currentUserId, roomSlug, user, guest, appendUniqueMessage]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -345,7 +336,7 @@ export default function HomeClient({
       };
 
       // Primary V3 path: Cloudflare PartyServer Edge WebSocket (30s batched persistence)
-      if (room.sendSyncedChat(message.id, content)) {
+      if (sendSyncedChat(message.id, content)) {
         return;
       }
 
@@ -375,7 +366,7 @@ export default function HomeClient({
       currentBadgeColor,
       isAuthenticated,
       roomSlug,
-      room,
+      sendSyncedChat,
       appendUniqueMessage,
     ]
   );
@@ -495,8 +486,8 @@ export default function HomeClient({
                 onItemChange={setCurrentVideoItem}
                 modalOpen={anyModalOpen}
                 syncMode={room.syncMode}
-                syncedCurrent={room.isSynced ? room.current : undefined}
-                syncedNext={room.isSynced ? room.next : undefined}
+                syncedCurrent={room.isSynced ? room.current : syncGaveUp ? undefined : null}
+                syncedNext={room.isSynced ? room.next : syncGaveUp ? undefined : null}
                 clipStartTimestamp={room.clipStartTimestamp}
                 getSyncedOffsetSec={room.getSyncedOffsetSec}
                 onReportDuration={room.reportClipDuration}
@@ -699,7 +690,7 @@ export default function HomeClient({
             style={{ scrollBehavior: "smooth", scrollbarWidth: "none" }}
           >
           <AnimatePresence initial={false}>
-            {messages.map((msg) => (
+            {displayMessages.map((msg) => (
               <motion.div
                 key={msg.id}
                 initial={{ opacity: 0, x: -16 }}

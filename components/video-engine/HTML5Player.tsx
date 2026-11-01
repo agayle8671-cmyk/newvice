@@ -85,7 +85,9 @@ export default function HTML5Player({
   });
 
   const [showControls, setShowControls] = useState(false);
-  const [creditVisible, setCreditVisible] = useState(false);
+  // Credit is visible for 6s after each new clip (derived from id) or while hovering
+  const [creditHiddenId, setCreditHiddenId] = useState<string | null>(null);
+  const [hoverCredit, setHoverCredit] = useState(false);
   const creditTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPrimed = useRef(false);
@@ -106,16 +108,14 @@ export default function HTML5Player({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerState.current?.id]);
 
-  // Show creator credit for 6 s on each new clip, then fade
+  // Hide the creator credit 6 s after each new clip starts
+  const currentId = playerState.current?.id ?? null;
   useEffect(() => {
-    if (!playerState.current) return;
-    setCreditVisible(true);
-    if (creditTimer.current) clearTimeout(creditTimer.current);
-    creditTimer.current = setTimeout(() => setCreditVisible(false), 6000);
-    return () => {
-      if (creditTimer.current) clearTimeout(creditTimer.current);
-    };
-  }, [playerState.current?.id]);
+    if (!currentId) return;
+    const t = setTimeout(() => setCreditHiddenId(currentId), 6000);
+    return () => clearTimeout(t);
+  }, [currentId]);
+  const creditVisible = hoverCredit || (currentId !== null && currentId !== creditHiddenId);
 
   // Auto-hide controls 2.5 s after last mouse movement
   const bumpControls = useCallback(() => {
@@ -126,9 +126,9 @@ export default function HTML5Player({
 
   const handleMouseMove = useCallback(() => {
     bumpControls();
-    setCreditVisible(true);
+    setHoverCredit(true);
     if (creditTimer.current) clearTimeout(creditTimer.current);
-    creditTimer.current = setTimeout(() => setCreditVisible(false), 3500);
+    creditTimer.current = setTimeout(() => setHoverCredit(false), 3500);
   }, [bumpControls]);
 
   // First click anywhere on the player surface -> unlock Web Audio DSP & unmute
@@ -147,7 +147,7 @@ export default function HTML5Player({
       onMouseMove={handleMouseMove}
       onMouseLeave={() => {
         setShowControls(false);
-        setCreditVisible(false);
+        setHoverCredit(false);
       }}
       onClick={handlePlayerClick}
     >

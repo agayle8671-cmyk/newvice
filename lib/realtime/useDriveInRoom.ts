@@ -114,6 +114,8 @@ export function useDriveInRoom({
   const wsConnectedRef = useRef(false);
   const socketRef = useRef<PartySocket | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncFnRef = useRef<() => Promise<void>>(async () => {});
+  const mountedRef = useRef(true);
 
   // Keep callback refs fresh without forcing WebSocket reconnects
   const callbacksRef = useRef({
@@ -158,17 +160,25 @@ export function useDriveInRoom({
     // Do not override active PartyServer WebSocket authority
     if (wsConnectedRef.current) return;
 
+    const scheduleNext = (delayMs: number) => {
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = setTimeout(() => {
+        void syncFnRef.current();
+      }, delayMs);
+    };
+
     try {
       const t0 = Date.now();
       const res = await fetch(
         `/api/room/${encodeURIComponent(roomSlug || "main-theater")}/sync`,
         { cache: "no-store" }
       );
-      if (!res.ok) return;
+      if (!res.ok) throw new Error(`sync ${res.status}`);
       const t1 = Date.now();
       const rtt = Math.max(0, t1 - t0);
       const data = await res.json();
 
+      if (!mountedRef.current) return;
       if (wsConnectedRef.current) return; // WS connected while HTTP was in flight
 
       if (typeof data.serverNow === "number") {
@@ -191,9 +201,6 @@ export function useDriveInRoom({
         }
 
         // Schedule exact boundary transition for the deterministic cycle
-        if (transitionTimerRef.current) {
-          clearTimeout(transitionTimerRef.current);
-        }
         const durMs =
           Math.max(
             12,
@@ -203,15 +210,26 @@ export function useDriveInRoom({
           0,
           Date.now() + serverClockOffsetRef.current - clipStartRef.current
         );
-        const remainingMs = Math.max(600, durMs - offsetMs + 120);
-        transitionTimerRef.current = setTimeout(() => {
-          fetchServerClockSync();
-        }, remainingMs);
+        scheduleNext(Math.max(600, durMs - offsetMs + 120));
+      } else {
+        scheduleNext(5000);
       }
     } catch {
-      // Silent retry on next interval
+      // Transient network/API failure: retry shortly instead of waiting for the 45s poll
+      if (mountedRef.current && !wsConnectedRef.current) scheduleNext(4000);
     }
   }, [roomSlug, updateClockOffset]);
+
+  useEffect(() => {
+    syncFnRef.current = fetchServerClockSync;
+  }, [fetchServerClockSync]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // ── Apply 100ms Differential Delta Tuples ──────────────────────────────────
   const applyDeltas = useCallback((deltas: RoomDeltaTuple[]) => {
@@ -305,9 +323,9 @@ export function useDriveInRoom({
 
     if (!partyHost) {
       // PartyServer host not configured yet — immediately activate deterministic server-clock sync
-      fetchServerClockSync();
+      void syncFnRef.current();
       fallbackPollInterval = setInterval(() => {
-        fetchServerClockSync();
+        void syncFnRef.current();
       }, 45_000);
 
       return () => {
@@ -328,7 +346,7 @@ export function useDriveInRoom({
     // If Edge WS takes >3.5s on cold network, warm up with deterministic server-clock in the meantime
     wsFallbackTimeout = setTimeout(() => {
       if (!disposed && !wsConnectedRef.current) {
-        fetchServerClockSync();
+        void syncFnRef.current();
       }
     }, 3500);
 
@@ -458,7 +476,7 @@ export function useDriveInRoom({
         pingInterval = null;
       }
       // Fall back seamlessly to server-clock while PartySocket auto-reconnects
-      fetchServerClockSync();
+      void syncFnRef.current();
     });
 
     return () => {
@@ -472,7 +490,7 @@ export function useDriveInRoom({
       ws.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyHost, roomSlug, fetchServerClockSync, updateClockOffset, applyDeltas]);
+  }, [partyHost, roomSlug, updateClockOffset, applyDeltas]);
 
   // Re-send IDENTIFY dynamically whenever auth profile or vehicle cosmetics change
   useEffect(() => {

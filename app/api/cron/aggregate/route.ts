@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
+import { connection } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-// Vercel Cron calls this every 4 hours.
-// Add to vercel.json:
-//   "crons": [{ "path": "/api/cron/aggregate", "schedule": "0 */4 * * *" }]
+// Daily Vercel Cron tick (see vercel.json). Retires long-running stale clips and
+// kicks off a lightweight crawl on the bound Python service. The full 20-platform
+// crawl + perceptual dedup runs in the GitHub Actions worker (crawler-worker.yml).
 
 export async function GET(request: Request) {
-  // Verify cron secret
+  // Opt this handler out of build-time prerendering (cacheComponents) — it must run per request.
+  await connection();
+
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const authHeader = request.headers.get("authorization");
@@ -14,77 +18,64 @@ export async function GET(request: Request) {
     }
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-  const isLive = supabaseUrl.startsWith("https://") && supabaseKey.length > 10;
-
-  if (!isLive) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
     return NextResponse.json({
       ok: false,
-      message: "Demo mode — no Supabase. Aggregator skipped.",
+      message: "Supabase service role not configured — aggregator skipped.",
     });
   }
 
-  // The Python crawler is the primary ingestion engine.
-  // This route handles two things:
-  //   1. Marking stale videos (>30 days old, played 10+ times) as inactive
-  //   2. Logging that a cron tick occurred
-  //
-  // The actual crawling happens in the Python sidecar (crawler/main.py).
-  // Point the Python cron at Supabase directly using the service role key.
-
   try {
-    const { createServerSupabaseClient } = await import("@/lib/supabase/server");
-    const supabase = await createServerSupabaseClient();
-
-    // Deactivate stale videos
-    const thirtyDaysAgo = new Date(
-      Date.now() - 30 * 24 * 60 * 60 * 1000
-    ).toISOString();
-
-    await supabase
+    // Retire stale, heavily-played clips (>30 days old, 10+ plays)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: retired, error: retireError } = await supabase
       .from("video_catalog")
       .update({ is_active: false })
       .lt("fetched_at", thirtyDaysAgo)
       .gte("play_count", 10)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .select("id");
 
-    const deactivated = 0; // count not needed for logging
+    if (retireError) throw retireError;
+    const deactivated = retired?.length ?? 0;
 
-    // Log run
-    await supabase.from("aggregator_runs").insert({
-      run_at: new Date().toISOString(),
-      sources_crawled: 0,   // Python crawler updates this directly
-      videos_found: 0,
-      videos_added: 0,
-      videos_rejected: 0,
-      error_log: null,
-    });
-
-    // Trigger crawl run on the crawler service if bound via Vercel services
+    let dispatched = false;
+    let dispatchError: string | null = null;
     const crawlerBaseUrl = process.env.CRAWLER_SERVICE_URL;
     if (crawlerBaseUrl) {
       try {
         const crawlUrl = new URL("crawl", crawlerBaseUrl.endsWith("/") ? crawlerBaseUrl : `${crawlerBaseUrl}/`);
-        await fetch(crawlUrl, {
+        const res = await fetch(crawlUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ platforms: ["archive", "peertube"] }),
+          signal: AbortSignal.timeout(50_000),
         });
+        dispatched = res.ok;
+        if (!res.ok) dispatchError = `crawler responded ${res.status}`;
       } catch (err) {
+        dispatchError = String(err);
         console.error("[aggregate-cron] crawler dispatch error:", err);
       }
     }
 
+    await supabase.from("aggregator_runs").insert({
+      run_at: new Date().toISOString(),
+      sources_crawled: dispatched ? 2 : 0,
+      videos_found: 0,
+      videos_added: 0,
+      videos_rejected: deactivated,
+      error_log: dispatchError,
+    });
+
     return NextResponse.json({
       ok: true,
       message: "Cron tick complete",
-      deactivated: deactivated ?? 0,
+      deactivated,
+      crawlerDispatched: dispatched,
     });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }
 }

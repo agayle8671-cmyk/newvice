@@ -93,6 +93,31 @@ class handler(BaseHTTPRequestHandler):
 
             self._send_json(200, {"ok": True, "refreshed": refreshed, "total_requested": len(video_ids)})
 
+        elif parsed.path in ("/resolve", "/api/resolve"):
+            # Resolve a user-submitted page URL (Medal, Reddit, Rumble, ...) into a playable stream
+            target = str(payload.get("url", "")).strip()
+            if not target.startswith("https://") or len(target) > 500:
+                self._send_json(400, {"ok": False, "error": "A valid https:// url is required"})
+                return
+            try:
+                info = extract(target)
+            except Exception as e:
+                self._send_json(502, {"ok": False, "error": str(e)})
+                return
+            if not info or not (info.get("manifest_url") or info.get("direct_mp4_url")):
+                self._send_json(200, {"ok": False, "error": "No playable stream found"})
+                return
+            self._send_json(200, {
+                "ok": True,
+                "manifest_url": info.get("manifest_url"),
+                "direct_mp4_url": info.get("direct_mp4_url"),
+                "title": info.get("title"),
+                "uploader": info.get("uploader"),
+                "thumbnail": info.get("thumbnail"),
+                "duration_sec": info.get("duration_sec"),
+                "uploaded_at": info.get("uploaded_at"),
+            })
+
         elif parsed.path in ("/crawl", "/api/crawl"):
             platforms = payload.get("platforms", ["archive", "peertube"])
             try:

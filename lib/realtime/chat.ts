@@ -62,11 +62,32 @@ export async function sendChatMessage(
   });
 }
 
+const roomIdCache = new Map<string, string | null>();
+
+/** messages.room_id is a UUID FK to rooms(id); callers only know the room slug. */
+async function resolveRoomId(slugOrId: string): Promise<string | null> {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)) {
+    return slugOrId;
+  }
+  if (roomIdCache.has(slugOrId)) return roomIdCache.get(slugOrId) ?? null;
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("slug", slugOrId)
+    .maybeSingle();
+  const id = (data?.id as string | undefined) ?? null;
+  if (id) roomIdCache.set(slugOrId, id);
+  return id;
+}
+
 export async function persistMessage(
-  roomId: string,
+  roomSlug: string,
   userId: string,
   content: string
 ): Promise<void> {
+  const roomId = await resolveRoomId(roomSlug);
+  if (!roomId) return; // room not provisioned — chat still works over realtime
   const supabase = createClient();
   await supabase.from("messages").insert({
     room_id: roomId,

@@ -18,6 +18,8 @@
     }
   ],
   "vars": {
-    "SUPABASE_URL": "https://ylinzijawuzvnkzucoxf.supabase.co"
+    "SUPABASE_URL": "https://ylinzijawuzvnkzucoxf.supabase.co",
+    "GTA6_LAUNCH_DATE": "2026-11-19T00:00:00Z",
+    "GTA6_LAUNCH_MODE": "false"
   }
 }

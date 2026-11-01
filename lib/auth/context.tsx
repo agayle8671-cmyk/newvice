@@ -35,6 +35,7 @@ interface AuthContextType {
     username: string
   ) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -48,6 +49,7 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => ({}),
   signUp: async () => ({}),
   signOut: async () => {},
+  refreshProfile: async () => {},
 });
 
 export function useAuth() {
@@ -58,13 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const isSupabaseConfigured = !!(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
+  const isLoading = isSupabaseConfigured && !initialized;
 
   // Fetch user profile from Supabase
   const fetchProfile = useCallback(
@@ -91,12 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setIsLoading(false);
-      return;
-    }
+    if (!isSupabaseConfigured) return;
 
     let mounted = true;
+    let unsubscribe: (() => void) | null = null;
 
     async function init() {
       try {
@@ -128,14 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(null);
           }
         });
-
-        if (mounted) setIsLoading(false);
-
-        return () => {
-          subscription.unsubscribe();
-        };
+        unsubscribe = () => subscription.unsubscribe();
+        // Component unmounted while we were awaiting — clean up immediately
+        if (!mounted) unsubscribe();
       } catch {
-        if (mounted) setIsLoading(false);
+        // Auth init failed — guest mode still works
+      } finally {
+        if (mounted) setInitialized(true);
       }
     }
 
@@ -143,8 +143,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      unsubscribe?.();
     };
   }, [isSupabaseConfigured, fetchProfile]);
+
+  const refreshProfile = useCallback(async () => {
+    if (user) await fetchProfile(user.id);
+  }, [user, fetchProfile]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -218,6 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
+        refreshProfile,
       }}
     >
       {children}

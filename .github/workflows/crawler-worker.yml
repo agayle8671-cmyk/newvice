@@ -30,6 +30,9 @@ jobs:
       IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
       GTA6_LAUNCH_DATE: ${{ vars.GTA6_LAUNCH_DATE || '2026-11-19T00:00:00Z' }}
       GTA6_LAUNCH_MODE: ${{ vars.GTA6_LAUNCH_MODE || 'false' }}
+      # Passed via env (not inline ${{ }} in the shell script) to prevent script injection
+      INPUT_PLATFORMS: ${{ inputs.platforms }}
+      INPUT_BACKFILL: ${{ inputs.backfill_phash }}
 
     steps:
       - name: Checkout repository
@@ -61,12 +64,13 @@ jobs:
             exit 0
           fi
 
-          if [ "${{ inputs.backfill_phash }}" = "true" ]; then
+          if [ "$INPUT_BACKFILL" = "true" ]; then
             python -m crawler.backfill_phash
           fi
 
-          if [ -n "${{ inputs.platforms }}" ]; then
-            python -m crawler.run_all --platforms ${{ inputs.platforms }}
+          if [ -n "$INPUT_PLATFORMS" ]; then
+            # shellcheck disable=SC2086
+            python -m crawler.run_all --platforms $INPUT_PLATFORMS
           else
             python -m crawler.run_all
           fi

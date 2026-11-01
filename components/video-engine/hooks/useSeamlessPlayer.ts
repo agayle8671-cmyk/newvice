@@ -58,49 +58,59 @@ function canProxyUrl(rawUrl: string): boolean {
 }
 
 /**
- * Resolves a media URL through the zero-buffer CORS byte-range streamer so
- * Web Audio DSP (loudness compressor, 20-120Hz sub-bass analyser, Cabin FM)
- * and 32x18 ambient canvas sampling never hit cross-origin tainting.
+ * Playback strategies for a progressive MP4, tried in order until one loads:
+ *   party  — Cloudflare edge CORS proxy (zero egress cost; enables Web Audio DSP)
+ *   vercel — /api/video/stream byte-range proxy (CORS-enabled, but bills Vercel bandwidth)
+ *   direct — raw CDN URL without CORS (always plays; no loudness-normalizer/analyser)
+ *
+ * With no edge proxy configured we play DIRECT first so ordinary viewing never streams
+ * 100MB MP4s through Vercel functions; the Vercel proxy is only a last-resort fallback.
  */
-export function resolveCorsMediaUrl(
+export type MediaStrategy = "party" | "vercel" | "direct";
+
+function getPartyHost(): string {
+  return (process.env.NEXT_PUBLIC_PARTYSERVER_HOST || "")
+    .trim()
+    .replace(/^(http|https|ws|wss):\/\//, "")
+    .replace(/\/$/, "");
+}
+
+export function getStrategyOrder(allowDirect = true): MediaStrategy[] {
+  const order: MediaStrategy[] = getPartyHost()
+    ? ["party", "vercel", "direct"]
+    : process.env.NEXT_PUBLIC_ENABLE_VERCEL_MEDIA_PROXY === "true"
+    ? ["vercel", "direct"]
+    : ["direct", "vercel"];
+  // A <video> already wired into Web Audio goes silent on non-CORS sources, so never use direct for it
+  return allowDirect ? order : order.filter((x) => x !== "direct");
+}
+
+export function resolveMediaUrl(
   rawUrl: string,
-  preferNextProxy = false
+  strategy: MediaStrategy
 ): { url: string; useAnonymousCors: boolean } {
   if (!rawUrl) return { url: "", useAnonymousCors: false };
 
-  // Same-origin relative URLs already satisfy CORS
-  if (rawUrl.startsWith("/")) {
+  // Same-origin and HLS (hls.js XHR; PeerTube/Mux send CORS headers) never need a proxy
+  if (rawUrl.startsWith("/") || isHlsUrl(rawUrl)) {
     return { url: rawUrl, useAnonymousCors: true };
   }
+  if (!canProxyUrl(rawUrl)) return { url: rawUrl, useAnonymousCors: false };
 
-  // HLS manifests use XHR/Fetch via hls.js (PeerTube & Mux send native CORS headers)
-  if (isHlsUrl(rawUrl)) {
-    return { url: rawUrl, useAnonymousCors: true };
-  }
-
-  if (canProxyUrl(rawUrl)) {
-    const partyHost = (process.env.NEXT_PUBLIC_PARTYSERVER_HOST || "")
-      .trim()
-      .replace(/^(http|https|ws|wss):\/\//, "")
-      .replace(/\/$/, "");
-
-    if (partyHost && !preferNextProxy) {
+  if (strategy === "party") {
+    const partyHost = getPartyHost();
+    if (partyHost) {
       const proto =
-        partyHost.startsWith("localhost:") || partyHost.startsWith("127.0.0.1:")
-          ? "http"
-          : "https";
+        partyHost.startsWith("localhost:") || partyHost.startsWith("127.0.0.1:") ? "http" : "https";
       return {
         url: `${proto}://${partyHost}/proxy-media?url=${encodeURIComponent(rawUrl)}`,
         useAnonymousCors: true,
       };
     }
-
-    return {
-      url: `/api/video/stream?url=${encodeURIComponent(rawUrl)}`,
-      useAnonymousCors: true,
-    };
   }
-
+  if (strategy === "vercel" || strategy === "party") {
+    return { url: `/api/video/stream?url=${encodeURIComponent(rawUrl)}`, useAnonymousCors: true };
+  }
   return { url: rawUrl, useAnonymousCors: false };
 }
 
@@ -119,8 +129,7 @@ type VideoWithMeta = HTMLVideoElement & {
   _hls?: HlsInstance;
   _rawUrl?: string;
   _itemId?: string;
-  _triedNextProxyFallback?: boolean;
-  _triedDirectFallback?: boolean;
+  _strategyIdx?: number;
 };
 
 async function attachSource(
@@ -128,7 +137,7 @@ async function attachSource(
   rawUrl: string,
   itemId: string,
   muted: boolean,
-  options?: { preferNextProxy?: boolean; forceDirectNoCors?: boolean }
+  strategyIdx = 0
 ): Promise<HlsInstance | null> {
   const v = video as VideoWithMeta;
   video.muted = muted;
@@ -139,19 +148,16 @@ async function attachSource(
     v._hls = undefined;
   }
 
-  v._rawUrl = rawUrl;
-  v._itemId = itemId;
-  if (!options?.preferNextProxy && !options?.forceDirectNoCors) {
-    v._triedNextProxyFallback = false;
-    v._triedDirectFallback = false;
-  }
-
   const audioGraph = getDriveInAudioGraph();
   const alreadyRoutedToWebAudio = audioGraph.isElementRouted(video);
 
-  const resolved = options?.forceDirectNoCors
-    ? { url: rawUrl, useAnonymousCors: alreadyRoutedToWebAudio }
-    : resolveCorsMediaUrl(rawUrl, options?.preferNextProxy);
+  const order = getStrategyOrder(!alreadyRoutedToWebAudio);
+  const idx = Math.min(strategyIdx, order.length - 1);
+  v._rawUrl = rawUrl;
+  v._itemId = itemId;
+  v._strategyIdx = idx;
+
+  const resolved = resolveMediaUrl(rawUrl, order[idx]);
 
   if (resolved.useAnonymousCors) {
     video.crossOrigin = "anonymous";
@@ -224,6 +230,8 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   } = options;
 
   const isRoomControlled = syncedCurrent !== undefined;
+  // YouTube/Vimeo-style items with no direct stream play via the official iframe embed
+  const isEmbedFallback = isRoomControlled && isOfficialEmbedOnly(syncedCurrent);
 
   const playerARef = useRef<HTMLVideoElement>(null);
   const playerBRef = useRef<HTMLVideoElement>(null);
@@ -231,6 +239,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   const activeSlot = useRef<"A" | "B">("A");
   const swapping = useRef(false);
   const swapQueued = useRef(false);
+  const swapRef = useRef<() => Promise<void>>(async () => {});
 
   const volumeRef = useRef(0.85);
   const mutedRef = useRef(true);
@@ -247,7 +256,6 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   });
 
   const [opacity, setOpacity] = useState({ A: 1, B: 0 });
-  const [isEmbedFallback, setIsEmbedFallback] = useState(false);
 
   const slotEl = useCallback(
     (slot: "A" | "B"): HTMLVideoElement | null =>
@@ -332,20 +340,12 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
     // Tier-2 Official Embed Fallback (YouTube / Vimeo / Dailymotion iframe)
     if (isOfficialEmbedOnly(syncedCurrent)) {
-      setIsEmbedFallback(true);
+      // Player state for the embed is derived (see exposedState) — just silence the <video> slots
       playerARef.current?.pause();
       playerBRef.current?.pause();
-      setPlayerState((s) => ({
-        ...s,
-        status: "playing",
-        current: syncedCurrent,
-        next: syncedNext ?? null,
-        progress: 0,
-      }));
       return;
     }
 
-    setIsEmbedFallback(false);
     const streamUrl = syncedCurrent.manifestUrl ?? syncedCurrent.directMp4Url;
     if (!streamUrl) return;
 
@@ -557,7 +557,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     swapping.current = false;
     if (swapQueued.current) {
       swapQueued.current = false;
-      swap();
+      void swapRef.current();
     }
   }, [
     isRoomControlled,
@@ -567,6 +567,10 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     slotEl,
     applyVolumeToActiveElement,
   ]);
+
+  useEffect(() => {
+    swapRef.current = swap;
+  }, [swap]);
 
   // ── Time update -> progress bar + <50ms drift alignment + standalone handoff ──
   const handleTimeUpdate = useCallback(() => {
@@ -615,33 +619,25 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         const el = slotEl(slot) as VideoWithMeta | null;
         if (!el) return;
 
-        // Tiered self-healing stream recovery before declaring error
+        // Tiered self-healing: try the next playback strategy before declaring an error
         const rawUrl = el._rawUrl;
         const itemId = el._itemId || "unknown";
-        const partyHostConfigured = Boolean(
-          (process.env.NEXT_PUBLIC_PARTYSERVER_HOST || "").trim()
-        );
-
-        if (rawUrl && partyHostConfigured && !el._triedNextProxyFallback) {
-          el._triedNextProxyFallback = true;
-          attachSource(el, rawUrl, itemId, slot !== activeSlot.current ? true : mutedRef.current, {
-            preferNextProxy: true,
-          }).then(() => {
-            if (activeSlot.current === slot) el.play().catch(() => {});
-            else el.load();
-          });
-          return;
-        }
-
-        if (rawUrl && !el._triedDirectFallback) {
-          el._triedDirectFallback = true;
-          attachSource(el, rawUrl, itemId, slot !== activeSlot.current ? true : mutedRef.current, {
-            forceDirectNoCors: true,
-          }).then(() => {
-            if (activeSlot.current === slot) el.play().catch(() => {});
-            else el.load();
-          });
-          return;
+        if (rawUrl) {
+          const routed = getDriveInAudioGraph().isElementRouted(el);
+          const order = getStrategyOrder(!routed);
+          const nextIdx = (el._strategyIdx ?? 0) + 1;
+          if (nextIdx < order.length) {
+            const isActive = activeSlot.current === slot;
+            attachSource(el, rawUrl, itemId, isActive ? mutedRef.current : true, nextIdx).then(() => {
+              if (isActive) {
+                alignElementToRoomClock(el, true);
+                el.play().catch(() => {});
+              } else {
+                el.load();
+              }
+            });
+            return;
+          }
         }
 
         if (activeSlot.current !== slot) return; // Ignore unrecoverable prebuffer error
@@ -652,7 +648,8 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
           return;
         }
         setTimeout(() => {
-          if (!swapping.current) swap();
+          if (isRoomControlled) onRefreshSync?.();
+          else if (!swapping.current) swap();
         }, 1200);
       },
     }),
@@ -696,9 +693,11 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   }, [isRoomControlled, fetchNext]);
 
   useEffect(() => {
+    const slotA = playerARef.current;
+    const slotB = playerBRef.current;
     return () => {
-      destroyHls(playerARef.current);
-      destroyHls(playerBRef.current);
+      destroyHls(slotA);
+      destroyHls(slotB);
     };
   }, []);
 
@@ -773,11 +772,15 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     }
   }, [activeEl, isRoomControlled, alignElementToRoomClock]);
 
+  const exposedState: PlayerState = isEmbedFallback && syncedCurrent
+    ? { ...playerState, status: "playing", current: syncedCurrent, next: syncedNext ?? null, progress: 0 }
+    : playerState;
+
   return {
     playerARef,
     playerBRef,
     opacity,
-    playerState,
+    playerState: exposedState,
     isEmbedFallback,
     prime,
     unmute,

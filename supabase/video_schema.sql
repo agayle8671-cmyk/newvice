@@ -5,7 +5,7 @@
 
 -- Permanent video catalog (canonical URLs — never expire)
 CREATE TABLE IF NOT EXISTS video_catalog (
-  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   source_platform  TEXT NOT NULL,
   canonical_url    TEXT NOT NULL,
   youtube_id       TEXT,
@@ -57,13 +57,12 @@ CREATE TABLE IF NOT EXISTS room_playback_state (
 
 ALTER TABLE room_playback_state ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public read room_playback_state" ON room_playback_state;
+DROP POLICY IF EXISTS "Service role write room_playback_state" ON room_playback_state;
 CREATE POLICY "Public read room_playback_state"
   ON room_playback_state FOR SELECT
   USING (true);
-
-CREATE POLICY "Service role write room_playback_state"
-  ON room_playback_state FOR ALL
-  USING (true);
+-- Writes to room_playback_state are restricted to service_role (bypasses RLS)
 
 -- Index for efficient queue queries
 CREATE INDEX IF NOT EXISTS idx_video_catalog_queue
@@ -73,7 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_video_catalog_queue
 -- Per-session play history (prevents repeating clips in same browser session)
 CREATE TABLE IF NOT EXISTS video_session_plays (
   session_id  TEXT NOT NULL,
-  video_id    UUID REFERENCES video_catalog(id) ON DELETE CASCADE,
+  video_id    TEXT REFERENCES video_catalog(id) ON DELETE CASCADE,
   played_at   TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (session_id, video_id)
 );
@@ -94,37 +93,28 @@ ALTER TABLE video_catalog ENABLE ROW LEVEL SECURITY;
 ALTER TABLE video_session_plays ENABLE ROW LEVEL SECURITY;
 ALTER TABLE aggregator_runs ENABLE ROW LEVEL SECURITY;
 
--- Anyone can read approved active videos
+-- Anyone can read approved active videos (writes require service_role)
+DROP POLICY IF EXISTS "Public read video_catalog" ON video_catalog;
+DROP POLICY IF EXISTS "Service role insert video_catalog" ON video_catalog;
+DROP POLICY IF EXISTS "Service role update video_catalog" ON video_catalog;
 CREATE POLICY "Public read video_catalog"
   ON video_catalog FOR SELECT
   USING (is_active = true AND is_approved = true);
 
--- Only service role can insert/update (crawler uses service role key)
-CREATE POLICY "Service role insert video_catalog"
-  ON video_catalog FOR INSERT
-  WITH CHECK (true);
-
-CREATE POLICY "Service role update video_catalog"
-  ON video_catalog FOR UPDATE
-  USING (true);
-
--- Session plays — anyone can read/write their own session
+-- Session plays — read/insert only (deletes require service_role)
+DROP POLICY IF EXISTS "Session plays read" ON video_session_plays;
+DROP POLICY IF EXISTS "Session plays insert" ON video_session_plays;
+DROP POLICY IF EXISTS "Session plays delete" ON video_session_plays;
 CREATE POLICY "Session plays read"
   ON video_session_plays FOR SELECT
   USING (true);
 
 CREATE POLICY "Session plays insert"
   ON video_session_plays FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (length(session_id) BETWEEN 8 AND 128);
 
-CREATE POLICY "Session plays delete"
-  ON video_session_plays FOR DELETE
-  USING (true);
-
--- Aggregator runs — service role only
-CREATE POLICY "Service role aggregator_runs"
-  ON aggregator_runs FOR ALL
-  USING (true);
+-- Aggregator runs — service_role only (no public policies)
+DROP POLICY IF EXISTS "Service role aggregator_runs" ON aggregator_runs;
 
 -- ============================================================
 -- Seed demo data (optional — remove before production)

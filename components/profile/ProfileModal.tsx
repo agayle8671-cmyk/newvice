@@ -3,29 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth/context";
-
-// ─── Demo-mode profile (stored in localStorage) ──────────────────────────────
-const DEMO_KEY = "lv_profile_demo";
-
-interface DemoProfile {
-  username: string;
-  vehicle_badge: string;
-  badge_color: string;
-}
-
-function loadDemoProfile(): DemoProfile {
-  if (typeof window === "undefined")
-    return { username: "", vehicle_badge: "muscle_car", badge_color: "#ff007f" };
-  try {
-    const raw = localStorage.getItem(DEMO_KEY);
-    if (raw) return JSON.parse(raw) as DemoProfile;
-  } catch { /* ignore */ }
-  return { username: "", vehicle_badge: "muscle_car", badge_color: "#ff007f" };
-}
-
-function saveDemoProfile(p: DemoProfile) {
-  try { localStorage.setItem(DEMO_KEY, JSON.stringify(p)); } catch { /* ignore */ }
-}
+import { loadDemoProfile, saveDemoProfile } from "@/lib/profile/guest";
 
 // ─── Badge options ────────────────────────────────────────────────────────────
 const BADGE_OPTIONS = [
@@ -47,7 +25,7 @@ interface ProfileModalProps {
 }
 
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const isDemo = !user;
 
   const [username, setUsername]     = useState("");
@@ -57,22 +35,26 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const [saved, setSaved]           = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
-  // Populate fields from profile or demo storage on open
-  useEffect(() => {
-    if (!isOpen) return;
-    if (isDemo) {
-      const demo = loadDemoProfile();
-      setUsername(demo.username);
-      setBadge(demo.vehicle_badge);
-      setColor(demo.badge_color);
-    } else if (profile) {
-      setUsername(profile.username ?? "");
-      setBadge(profile.vehicle_badge ?? "muscle_car");
-      setColor(profile.badge_color ?? "#ff007f");
+  // Populate fields from profile or demo storage each time the modal opens.
+  // Done during render (not in an effect) to avoid cascading renders.
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
+      if (isDemo) {
+        const demo = loadDemoProfile();
+        setUsername(demo.username);
+        setBadge(demo.vehicle_badge);
+        setColor(demo.badge_color);
+      } else if (profile) {
+        setUsername(profile.username ?? "");
+        setBadge(profile.vehicle_badge ?? "muscle_car");
+        setColor(profile.badge_color ?? "#ff007f");
+      }
+      setSaved(false);
+      setError(null);
     }
-    setSaved(false);
-    setError(null);
-  }, [isOpen, isDemo, profile]);
+  }
 
   const handleSave = useCallback(async () => {
     const trimmed = username.trim();
@@ -104,6 +86,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         .update({ username: trimmed, vehicle_badge: badge, badge_color: color })
         .eq("id", user!.id);
       if (sbErr) throw sbErr;
+      await refreshProfile();
       setSaved(true);
       setTimeout(onClose, 900);
     } catch (e: unknown) {
@@ -111,7 +94,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     } finally {
       setSaving(false);
     }
-  }, [username, badge, color, isDemo, user, onClose]);
+  }, [username, badge, color, isDemo, user, onClose, refreshProfile]);
 
   // Close on Escape
   useEffect(() => {

@@ -1,34 +1,21 @@
 import { NextResponse } from "next/server";
-import type { VideoItem, VideoCategory, VideoSource } from "@/lib/video/types";
+import type { VideoItem } from "@/lib/video/types";
+import {
+  DEFAULT_CLIP_DURATION_SEC,
+  filterCatalogRows,
+  rowToVideoItem,
+  type CatalogRow,
+} from "@/lib/video/catalog";
+import { getSupabaseReader } from "@/lib/supabase/admin";
 
 // ─── Deterministic Server-Clock Room Coordinator ─────────────────────────────
 // Computes CurrentClipOffset = ServerNow() - ClipStartTimestamp deterministically
 // from the Unix epoch across the active catalog so every viewer worldwide sees
 // the exact same frame even before Cloudflare PartyServer is configured.
-
-const DEFAULT_CLIP_DURATION_SEC = 75;
-
-function platformIcon(platform: string): string {
-  const map: Record<string, string> = {
-    kick: "🟩",
-    rumble: "🟧",
-    dailymotion: "🟦",
-    peertube: "🐘",
-    odyssee: "🔵",
-    archive: "📦",
-    reddit: "🟥",
-    bilibili: "💙",
-    vimeo: "🎞️",
-    vk: "💬",
-    nicovideo: "🇯🇵",
-    medal: "🏅",
-    streamable: "⚡",
-    youtube: "▶️",
-    community: "🎬",
-    direct: "🎬",
-  };
-  return map[platform?.toLowerCase()] ?? "🎬";
-}
+//
+// The shared catalog gate (English-only + Launch-Day post-launch filter) is applied
+// here too, so leaks/speculation/pre-launch uploads can never reach the screen
+// once the game is out.
 
 function hashRoomOffset(slug: string): number {
   let h = 0;
@@ -51,7 +38,7 @@ const DEMO_FALLBACK: VideoItem[] = [
     sourceUrl: "https://leonidavice.com",
     durationSec: 120,
     category: "gameplay",
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: new Date(0).toISOString(),
     playCount: 0,
   },
 ];
@@ -66,64 +53,38 @@ async function getActivePlaylist(): Promise<VideoItem[]> {
     return cachedPlaylist;
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-  if (!supabaseUrl.startsWith("https://") || supabaseKey.length < 10) {
-    return DEMO_FALLBACK;
-  }
+  const supabase = getSupabaseReader();
+  if (!supabase) return DEMO_FALLBACK;
 
   try {
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from("video_catalog")
       .select("*")
       .eq("is_active", true)
       .eq("is_approved", true)
       .order("id", { ascending: true })
-      .limit(80);
+      .limit(200);
 
-    if (rows && rows.length > 0) {
-      const items: VideoItem[] = rows
-        .filter((r) => Boolean(r.direct_mp4_url || r.manifest_url || r.youtube_id))
-        .map((row) => ({
-          id: row.id,
-          source: (row.source_platform || "direct") as VideoSource,
-          manifestUrl: row.manifest_url ?? undefined,
-          directMp4Url: row.direct_mp4_url ?? undefined,
-          youtubeId: row.youtube_id ?? undefined,
-          title: row.title,
-          creatorName: row.creator_name || "Unknown",
-          creatorUrl: row.creator_url ?? row.canonical_url ?? "",
-          creatorAvatar: row.creator_avatar ?? undefined,
-          platform: row.source_platform || "archive",
-          platformIcon: platformIcon(row.source_platform),
-          sourceUrl: row.canonical_url,
-          thumbnail: row.thumbnail_url ?? undefined,
-          durationSec:
-            row.duration_sec && row.duration_sec > 5
-              ? Math.min(row.duration_sec, 1800)
-              : DEFAULT_CLIP_DURATION_SEC,
-          category: (row.source_category || "gameplay") as VideoCategory,
-          viewCount: row.view_count ?? undefined,
-          scoutName: row.scout_name ?? undefined,
-          viralHeatScore: row.viral_heat_score ?? undefined,
-          highBeamCount: row.high_beam_count ?? undefined,
-          perceptualHash: row.perceptual_hash ?? undefined,
-          fetchedAt: row.fetched_at,
-          playCount: row.play_count ?? 0,
-        }));
+    if (error) throw error;
 
-      if (items.length > 0) {
-        cachedPlaylist = items;
-        cachedAtMs = now;
-        return items;
-      }
+    const eligible = filterCatalogRows((rows ?? []) as CatalogRow[], {
+      GTA6_LAUNCH_DATE: process.env.GTA6_LAUNCH_DATE,
+      GTA6_LAUNCH_MODE: process.env.GTA6_LAUNCH_MODE,
+    });
+
+    if (eligible.length > 0) {
+      const items = eligible.map((row) => {
+        const item = rowToVideoItem(row);
+        return { ...item, durationSec: item.durationSec ?? DEFAULT_CLIP_DURATION_SEC };
+      });
+      cachedPlaylist = items;
+      cachedAtMs = now;
+      return items;
     }
   } catch (err) {
     console.error("[room-sync] catalog load error:", err);
+    // Serve stale cache rather than flapping to demo content on a transient DB error
+    if (cachedPlaylist && cachedPlaylist.length > 0) return cachedPlaylist;
   }
 
   return DEMO_FALLBACK;
@@ -134,7 +95,7 @@ export async function GET(
   context: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await context.params;
-  const roomSlug = slug || "main";
+  const roomSlug = (slug || "main-theater").slice(0, 64);
   const playlist = await getActivePlaylist();
   const serverNow = Date.now();
 

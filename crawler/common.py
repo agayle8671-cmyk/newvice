@@ -67,7 +67,7 @@ def get_logger(name: str) -> logging.Logger:
 # ─── Launch Phase & Date Boundary ─────────────────────────────────────────────
 # Automatically switches or can be forced via GTA6_LAUNCH_MODE=true
 # Once GTA 6 is out, all speculation, leak, and pre-launch rumor content is discarded.
-GTA6_LAUNCH_DATE = os.environ.get("GTA6_LAUNCH_DATE", "2025-10-01T00:00:00Z")
+GTA6_LAUNCH_DATE = os.environ.get("GTA6_LAUNCH_DATE") or "2026-11-19T00:00:00Z"
 GTA6_LAUNCH_MODE = os.environ.get("GTA6_LAUNCH_MODE", "false").lower() in ("true", "1", "yes")
 
 def is_post_launch() -> bool:
@@ -127,8 +127,12 @@ def passes_filter(title: str, description: str = "", uploaded_at: Optional[str] 
     if not title:
         return False, "missing title"
 
-    # Require GTA 6 in the title
-    if not GTA6_TITLE_REGEX.search(title):
+    # Require GTA 6 in the title. Post-launch, real gameplay clips often have titles like
+    # "insane police chase" — so the description may carry the GTA 6 reference instead.
+    title_matches = bool(GTA6_TITLE_REGEX.search(title))
+    if not title_matches and is_post_launch() and description:
+        title_matches = bool(GTA6_TITLE_REGEX.search(description[:500]))
+    if not title_matches:
         return False, "title does not reference GTA 6"
 
     # Reject non-English scripts

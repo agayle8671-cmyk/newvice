@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { VideoItem } from "@/lib/video/types";
+import { safeHttpUrl } from "@/lib/security/url";
 
 interface CreatorCreditProps {
   item: VideoItem | null;
@@ -32,6 +32,9 @@ export default function CreatorCredit({ item, visible }: CreatorCreditProps) {
   if (!item) return null;
 
   const color = platformColor(item.source);
+  // URLs originate from crawlers/user submissions — only ever render plain http(s) links
+  const originalHref = safeHttpUrl(item.sourceUrl);
+  const avatarSrc = safeHttpUrl(item.creatorAvatar);
 
   return (
     <AnimatePresence>
@@ -55,9 +58,10 @@ export default function CreatorCredit({ item, visible }: CreatorCreditProps) {
             }}
           >
             {/* Avatar */}
-            {item.creatorAvatar && (
+            {avatarSrc && (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={item.creatorAvatar}
+                src={avatarSrc}
                 alt={item.creatorName}
                 className="w-5 h-5 rounded-full shrink-0 object-cover"
               />
@@ -88,8 +92,9 @@ export default function CreatorCredit({ item, visible }: CreatorCreditProps) {
             </div>
 
             {/* View original link */}
+            {originalHref && (
             <a
-              href={item.sourceUrl}
+              href={originalHref}
               target="_blank"
               rel="noopener noreferrer"
               className="shrink-0 ml-1"
@@ -107,6 +112,7 @@ export default function CreatorCredit({ item, visible }: CreatorCreditProps) {
             >
               ↗ Original
             </a>
+            )}
           </div>
         </motion.div>
       )}

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { VideoItem } from "@/lib/video/types";
+import { safeHttpUrl } from "@/lib/security/url";
 
 interface OfficialEmbedFallbackProps {
   item: VideoItem;
@@ -33,16 +34,18 @@ export function buildOfficialEmbedUrl(
     )}?${params.toString()}`;
   }
 
-  if (item.embedUrl) {
+  // Only https embeds — a javascript:/data: iframe src would run in our origin
+  const embed = safeHttpUrl(item.embedUrl);
+  if (embed && embed.startsWith("https://")) {
     try {
-      const u = new URL(item.embedUrl);
+      const u = new URL(embed);
       if (!u.searchParams.has("autoplay")) u.searchParams.set("autoplay", "1");
       if (isMuted && !u.searchParams.has("muted")) {
         u.searchParams.set("muted", "1");
       }
       return u.toString();
     } catch {
-      return item.embedUrl;
+      return null;
     }
   }
 
