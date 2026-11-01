@@ -202,7 +202,7 @@ export default function HTML5Player({
       )}
 
       {/* ── Loading ──────────────────────────────────────────────────────── */}
-      {isLoading && (
+      {isLoading && !playerState.current && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black gap-3">
           <div className="w-6 h-6 border-[1.5px] border-[#00f3ff] border-t-transparent rounded-full animate-spin" />
           <p

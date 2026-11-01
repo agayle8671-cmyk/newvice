@@ -204,7 +204,7 @@ export function useDriveInRoom({
         const durMs =
           Math.max(
             12,
-            Math.min(data.current.durationSec || DEFAULT_CLIP_DURATION_SEC, 1800)
+            Math.min(data.current.durationSec || DEFAULT_CLIP_DURATION_SEC, 300)
           ) * 1000;
         const offsetMs = Math.max(
           0,

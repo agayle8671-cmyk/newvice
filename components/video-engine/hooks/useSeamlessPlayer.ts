@@ -312,7 +312,10 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
       if (forceHardSeek || absDrift > 1.2) {
         try {
-          el.currentTime = Math.max(0, effectiveTarget);
+          const safeTarget = Math.max(0, Math.min(effectiveTarget, Math.max(0, dur - 3)));
+          if (Math.abs(el.currentTime - safeTarget) > 1.0) {
+            el.currentTime = safeTarget;
+          }
         } catch {
           // Ignore seek before buffer ready
         }
@@ -448,7 +451,6 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       const syncOnMetadata = () => {
         targetEl.removeEventListener("loadedmetadata", syncOnMetadata);
         if (cancelled) return;
-        clearWatchdog();
         alignElementToRoomClock(targetEl, true);
         if (
           Number.isFinite(targetEl.duration) &&
@@ -673,9 +675,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         }
       },
       onCanPlay: () => {
-        if (activeSlot.current === slot) {
-          clearWatchdog();
-        }
+        // Canplay fired; watchdog remains armed until playback actually progresses
       },
       onEnded: () => {
         clearWatchdog();

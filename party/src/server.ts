@@ -175,7 +175,7 @@ export class DriveInRoomServer extends Server<Env> {
 
   private get currentClipDurationMs(): number {
     const durSec = this.currentItem?.durationSec || DEFAULT_CLIP_DURATION_SEC;
-    return Math.max(12, Math.min(durSec, 1800)) * 1000;
+    return Math.max(12, Math.min(durSec, 300)) * 1000;
   }
 
   /**

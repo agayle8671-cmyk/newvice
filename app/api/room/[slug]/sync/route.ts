@@ -92,7 +92,7 @@ export async function GET(
   }
 
   const durationsMs = playlist.map(
-    (item) => Math.max(12, Math.min(item.durationSec || DEFAULT_CLIP_DURATION_SEC, 1800)) * 1000
+    (item) => Math.max(12, Math.min(item.durationSec || DEFAULT_CLIP_DURATION_SEC, 300)) * 1000
   );
   const totalCycleMs = durationsMs.reduce((acc, d) => acc + d, 0);
 
