@@ -1,32 +1,46 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth/context";
 import { useGuestProfile } from "@/lib/profile/guest";
 import AuthModal from "@/components/auth/AuthModal";
 import ProfileModal from "@/components/profile/ProfileModal";
 import SubmitClipModal from "@/components/drive-in/SubmitClipModal";
-import CarCabinDrawer from "@/components/drive-in/CarCabinDrawer";
-import SkylineBackground from "@/components/drive-in/SkylineBackground";
-import NeonMarquee from "@/components/drive-in/NeonMarquee";
-import VehicleField from "@/components/drive-in/VehicleField";
 import VideoEngine from "@/components/video-engine/VideoEngine";
 import NowPlaying from "@/components/video-engine/NowPlaying";
-import ChatTerminal from "@/components/chat/ChatTerminal";
-import AffiliateWidget from "@/components/monetization/AffiliateWidget";
 import { filterMessage } from "@/lib/moderation/filter";
 import { useDriveInRoom } from "@/lib/realtime/useDriveInRoom";
-import { useCarCabinVoice } from "@/lib/realtime/cabin-voice";
 import { getDriveInAudioGraph } from "@/lib/audio/DriveInAudioGraph";
-import {
-  useViceEconomy,
-  recordDailyLotCheckIn,
-  awardViceCred,
-  dismissTowImpoundNotice,
-} from "@/lib/economy/vice-cred";
 import type { ChatMessage } from "@/lib/realtime/chat";
-import type { VehicleType } from "@/lib/realtime/party-protocol";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
+// ─── QWERTY KEY POSITIONS (0..1 within the keyboard canvas area) ─────────────
+// x = horizontal fraction, y = row fraction
+const QWERTY_ROWS = [
+  { chars: "QWERTYUIOP".split(""), y: 0.22, x0: 0.04, x1: 0.96 },
+  { chars: "ASDFGHJKL".split(""),  y: 0.52, x0: 0.10, x1: 0.90 },
+  { chars: "ZXCVBNM".split(""),    y: 0.78, x0: 0.18, x1: 0.82 },
+];
+const KEY_POS: Record<string, [number, number]> = {};
+QWERTY_ROWS.forEach(({ chars, y, x0, x1 }) => {
+  chars.forEach((c, i) => {
+    KEY_POS[c] = [x0 + (i / (chars.length - 1)) * (x1 - x0), y];
+  });
+});
+KEY_POS[" "] = [0.5, 0.92]; // space bar centre
+
+type GlowKey = { x: number; y: number; born: number; color: string };
+
+// Convert hex colour + 0‥1 alpha → rgba() string for canvas
+function hexAlpha(hex: string, a: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+}
 
 interface HomeClientProps {
   roomSlug?: string;
@@ -34,60 +48,46 @@ interface HomeClientProps {
   videoId?: string;
 }
 
-export default function HomeClient({
-  roomSlug = "main-theater",
-}: HomeClientProps) {
-  const { user, profile, setShowAuthModal, showAuthModal, signOut } = useAuth();
-  const guest = useGuestProfile();
+// ─── PIXEL-PERFECT COORDINATES (1408 × 768 source) ──────────────────────────
+//
+//  All values derived from actual pixel scanning of drive-in-background.jpg.
+//  The container is locked to the same 1408/768 aspect ratio and uses
+//  object-fill, so percentage values map 1:1 to the painted artwork.
+//
+//  ELEMENT               PX (L, T, W, H)      % (L, T, W, H)
+//  ─────────────────────────────────────────────────────────────
+//  Movie screen inner    367, 140, 676, 270    26.07, 18.23, 48.01, 35.16
+//  Chat body only        300, 442,  820,  34   21.31, 57.55, 58.24,  4.43
+//  Input field           472, 676,  368,  50   33.52, 88.02, 26.14,  6.51
+//  SEND button           851, 676,   89,  50   60.44, 88.02,  6.32,  6.51
+//  Popular topics panel  175, 242,  118, 135   12.43, 31.51,  8.38, 17.58
+//  JOIN button rect     1100, 326,   65,  30   78.13, 42.45,  4.62,  3.91
+
+export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProps) {
+  const { user, profile, isLoading, showAuthModal, setShowAuthModal, signOut } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [presenceCount, setPresenceCount] = useState(18);
+  // Real presence arrives from Supabase / PartyServer; 24 is just the pre-connect placeholder.
+  const [presenceCount, setPresenceCount] = useState(24);
+  const guest = useGuestProfile();
+  const [inputValue, setInputValue] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [inputFocused, setInputFocused] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [showCabinDrawer, setShowCabinDrawer] = useState(false);
-  const [wantedLevel, setWantedLevel] = useState<1 | 2 | 3 | 4 | 5>(5);
-  const [currentVideoItem, setCurrentVideoItem] = useState<
-    import("@/lib/video/types").VideoItem | null
-  >(null);
+  const [currentVideoItem, setCurrentVideoItem] = useState<import("@/lib/video/types").VideoItem | null>(null);
 
-  // Spatial Lot & Crowd Reaction states
-  const [localHighBeamsOn, setLocalHighBeamsOn] = useState(false);
-  const [localHazardsOn, setLocalHazardsOn] = useState(false);
-  const [activeHornSeatId, setActiveHornSeatId] = useState<string | null>(null);
-  const [encoreSurgeActive, setEncoreSurgeActive] = useState(false);
-  const [empGlitchActive, setEmpGlitchActive] = useState(false);
-
-  const stageRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const flashedClipIdsRef = useRef<Set<string>>(new Set());
-  const highBeamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hornRippleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
 
-  const economy = useViceEconomy();
-
-  // Record daily check-in & evaluate 48-hour Tow-Truck impound once on mount
-  useEffect(() => {
-    recordDailyLotCheckIn();
-  }, []);
-
+  // Derived auth state — declared here so keyboard glow effects can reference them
   const currentUserId = user ? user.id : guest?.id ?? "guest_pending";
   const currentUsername = profile?.username ?? guest?.username ?? "Driver";
-  const currentBadge = (profile?.vehicle_badge ??
-    guest?.vehicle_badge ??
-    "sports_car") as VehicleType;
-  const currentBadgeColor =
-    profile?.badge_color ?? guest?.badge_color ?? "#ff007f";
+  const currentBadge = profile?.vehicle_badge ?? guest?.vehicle_badge ?? "muscle_car";
+  const currentBadgeColor = profile?.badge_color ?? guest?.badge_color ?? "#ff007f";
   const isAuthenticated = !!user;
-
-  // ── 4-Seat WebRTC Car Crew Cabin + Warm 950 Hz FM Radio DSP ─────────────
-  const cabin = useCarCabinVoice({
-    userId: currentUserId,
-    username: currentUsername,
-    badgeColor: currentBadgeColor,
-  });
 
   const appendUniqueMessage = useCallback((incoming: ChatMessage) => {
     setMessages((prev) => {
@@ -96,30 +96,17 @@ export default function HomeClient({
     });
   }, []);
 
-  // ── Authoritative Edge Room Coordinator (PartyServer DO + Server-Clock Fallback) ──
+  // ── V3 Authoritative Edge Room Coordinator (PartyServer DO + Server-Clock Fallback) ──
   const room = useDriveInRoom({
     roomSlug,
     userId: currentUserId,
     username: currentUsername,
     vehicleType: currentBadge,
     badgeColor: currentBadgeColor,
-    licensePlate: economy.licensePlate,
-    viceCred: economy.viceCred,
-    streakDays: economy.streakDays,
-    onHornTrigger: (seatId, hornId, panX, zDepth) => {
-      const g = getDriveInAudioGraph();
-      g.unlock();
-      g.playSpatialHorn(hornId, panX, zDepth);
-      setActiveHornSeatId(seatId);
-      if (hornRippleTimerRef.current) clearTimeout(hornRippleTimerRef.current);
-      hornRippleTimerRef.current = setTimeout(
-        () => setActiveHornSeatId(null),
-        900
-      );
+    onHornTrigger: (_seatId, hornId, panX, zDepth) => {
+      getDriveInAudioGraph().playSpatialHorn(hornId, panX, zDepth);
     },
     onEncoreSurge: (bonusSec, highBeams) => {
-      setEncoreSurgeActive(true);
-      setTimeout(() => setEncoreSurgeActive(false), 4500);
       appendUniqueMessage({
         id: `encore_${Date.now()}`,
         userId: "system",
@@ -132,11 +119,7 @@ export default function HomeClient({
       });
     },
     onClipTransition: (reason, nextClip) => {
-      setLocalHighBeamsOn(false);
-      setLocalHazardsOn(false);
       if (reason === "emp_skip") {
-        setEmpGlitchActive(true);
-        setTimeout(() => setEmpGlitchActive(false), 950);
         appendUniqueMessage({
           id: `emp_${Date.now()}`,
           userId: "system",
@@ -151,7 +134,8 @@ export default function HomeClient({
     },
   });
 
-  // Merge local/Supabase messages with Edge Durable Object recent chat
+  // Chat shown = Supabase/fallback + system messages (local state) merged with the
+  // Edge Durable Object's authoritative room chat, de-duplicated and time-ordered.
   const displayMessages = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
     for (const m of messages) byId.set(m.id, m);
@@ -172,6 +156,8 @@ export default function HomeClient({
       .slice(-150);
   }, [messages, room.recentChat]);
 
+  // If the room coordinator can't be reached at all, fall back to the standalone queue
+  // after a grace period instead of leaving the screen on "TUNING IN" forever.
   const [syncGaveUp, setSyncGaveUp] = useState(false);
   useEffect(() => {
     if (room.isSynced) return;
@@ -184,135 +170,126 @@ export default function HomeClient({
     room.syncMode === "partyserver" && room.vehicles.length > 0
       ? room.vehicles.length
       : presenceCount;
-  const anyModalOpen =
-    showAuthModal || showProfileModal || showSubmitModal || showCabinDrawer;
+  const anyModalOpen = showAuthModal || showProfileModal || showSubmitModal;
 
-  // ── Interactive Lot Handlers & Keyboard Shortcuts ────────────────────────
-  const handleToggleHighBeams = useCallback(() => {
-    const nextState = !localHighBeamsOn;
-    setLocalHighBeamsOn(nextState);
-    room.sendFlash(nextState);
+  // ── Keyboard glow canvas ────────────────────────────────────────────────────
+  const kbCanvasRef = useRef<HTMLCanvasElement>(null);
+  const glowKeys   = useRef<GlowKey[]>([]);
+  const animRef    = useRef<number>(0);
+  const prevLen    = useRef(0);
+  const GLOW_DURATION = 550; // ms
 
-    if (highBeamTimerRef.current) clearTimeout(highBeamTimerRef.current);
-    if (nextState) {
-      highBeamTimerRef.current = setTimeout(() => {
-        setLocalHighBeamsOn(false);
-        room.sendFlash(false);
-      }, 5500);
-
-      const activeClipId = currentVideoItem?.id;
-      if (activeClipId && !flashedClipIdsRef.current.has(activeClipId)) {
-        flashedClipIdsRef.current.add(activeClipId);
-        awardViceCred(5, "high_beam");
-        fetch("/api/video/react", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            videoId: activeClipId,
-            reaction: "high_beam",
-          }),
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
-            if (data?.ok && typeof data.highBeamCount === "number") {
-              setCurrentVideoItem((prev) =>
-                prev && prev.id === activeClipId
-                  ? {
-                      ...prev,
-                      highBeamCount: data.highBeamCount,
-                      viralHeatScore:
-                        data.viralHeatScore ?? prev.viralHeatScore,
-                    }
-                  : prev
-              );
-            }
-          })
-          .catch(() => {});
-      }
-    }
-  }, [localHighBeamsOn, room, currentVideoItem?.id]);
-
-  const handleHonkHorn = useCallback(
-    (panX = 0, zDepth = 0.18, seatId?: string) => {
-      const g = getDriveInAudioGraph();
-      g.unlock();
-      g.playSpatialHorn(economy.preferredHorn, panX, zDepth);
-      room.sendHorn(economy.preferredHorn);
-
-      const targetSeat =
-        seatId ?? (economy.rank.qualifiesRowA ? "A-2" : "B-1");
-      setActiveHornSeatId(targetSeat);
-      if (hornRippleTimerRef.current) clearTimeout(hornRippleTimerRef.current);
-      hornRippleTimerRef.current = setTimeout(
-        () => setActiveHornSeatId(null),
-        900
-      );
-    },
-    [economy.preferredHorn, economy.rank.qualifiesRowA, room]
-  );
-
-  const handleToggleHazards = useCallback(() => {
-    const nextState = !localHazardsOn;
-    setLocalHazardsOn(nextState);
-    if (nextState && room.syncMode !== "partyserver") {
-      setEmpGlitchActive(true);
-      setTimeout(() => {
-        setEmpGlitchActive(false);
-        setLocalHazardsOn(false);
-      }, 950);
-    }
-    room.sendHazard(nextState);
-  }, [localHazardsOn, room]);
-
-  // Global hotkeys when chat input & modals are not focused:
-  //   SPACE = Flash High-Beams | H = 3D Horn | X = Hazard Vote Skip | R = FM Cabin Radio
+  // Animation loop — runs while component is mounted
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (anyModalOpen || inputFocused) return;
-      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
+    const canvas = kbCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-      if (e.code === "Space") {
-        e.preventDefault();
-        handleToggleHighBeams();
-      } else if (e.key === "h" || e.key === "H") {
-        e.preventDefault();
-        handleHonkHorn();
-      } else if (e.key === "x" || e.key === "X") {
-        e.preventDefault();
-        handleToggleHazards();
-      } else if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        cabin.toggleWindowsUpFm();
+    function frame() {
+      const now = Date.now();
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      glowKeys.current = glowKeys.current.filter(
+        (k) => now - k.born < GLOW_DURATION
+      );
+
+      for (const k of glowKeys.current) {
+        const t = (now - k.born) / GLOW_DURATION; // 0→1
+        const alpha = Math.pow(1 - t, 1.8);        // fast fade
+        const cx = k.x * canvas!.width;
+        const cy = k.y * canvas!.height;
+        const r  = 18 * (1 - t * 0.5);            // shrinks slightly
+
+        // Outer neon halo
+        const grad = ctx!.createRadialGradient(cx, cy, 0, cx, cy, r * 3.5);
+        grad.addColorStop(0,   hexAlpha(k.color, alpha * 0.85));
+        grad.addColorStop(0.5, hexAlpha(k.color, alpha * 0.35));
+        grad.addColorStop(1,   hexAlpha(k.color, 0));
+        ctx!.fillStyle = grad;
+        ctx!.beginPath();
+        ctx!.arc(cx, cy, r * 3.5, 0, Math.PI * 2);
+        ctx!.fill();
+
+        // Bright core
+        ctx!.fillStyle = `rgba(255,255,255,${alpha * 0.9})`;
+        ctx!.beginPath();
+        ctx!.arc(cx, cy, r * 0.35, 0, Math.PI * 2);
+        ctx!.fill();
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    anyModalOpen,
-    inputFocused,
-    handleToggleHighBeams,
-    handleHonkHorn,
-    handleToggleHazards,
-    cabin,
-  ]);
 
-  // ── Supabase Realtime Chat Connection ───────────────────────────────────
-  const isDemoMode = useRef(true);
-  const [chatConnected, setChatConnected] = useState(true);
+      animRef.current = requestAnimationFrame(frame);
+    }
+    frame();
+    return () => cancelAnimationFrame(animRef.current);
+  }, []);
+
+  // Spawn a glow on each new character typed
+  useEffect(() => {
+    const newLen = inputValue.length;
+    if (newLen > prevLen.current) {
+      const char = inputValue[newLen - 1].toUpperCase();
+      const isSpace = char === " ";
+      const color = "#00f3ff"; // default cyan; badge color applied after mount
+
+      if (isSpace) {
+        glowKeys.current.push(
+          { x: 0.5,  y: 0.92, born: Date.now(),      color: "#ff007f" },
+          { x: 0.35, y: 0.92, born: Date.now() - 40, color: "#ff007f" },
+          { x: 0.65, y: 0.92, born: Date.now() - 80, color: "#ff007f" }
+        );
+      } else {
+        const pos = KEY_POS[char] ?? [
+          Math.random() * 0.7 + 0.15,
+          Math.random() * 0.6 + 0.15,
+        ];
+        glowKeys.current.push({ x: pos[0], y: pos[1], born: Date.now(), color });
+      }
+    }
+    prevLen.current = newLen;
+  }, [inputValue]);
+
+  // Send pulse — wave across all keys
+  const triggerSendPulse = useCallback(() => {
+    const now = Date.now();
+    const allKeys = Object.values(KEY_POS);
+    allKeys.forEach(([x, y], i) => {
+      glowKeys.current.push({
+        x, y, color: "#00f3ff", born: now + i * 18,
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (autoScroll && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages, autoScroll]);
+
+  const handleChatScroll = useCallback(() => {
+    if (!chatScrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current;
+    setAutoScroll(scrollHeight - scrollTop - clientHeight < 30);
+  }, []);
+
+  const isDemoMode = useRef(true); // flipped to false only when live Supabase confirmed
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
     const live = url.startsWith("https://") && key.length > 10;
 
+    // Wait until the persistent guest identity is ready so we subscribe exactly once per identity
     if (!user && !guest) return;
 
     if (!live) {
+      // DEMO MODE — zero network, zero Supabase, pure local React state.
+      // Chat is blank. Only messages you send appear. Nothing persists.
       isDemoMode.current = true;
       return;
     }
 
+    // LIVE MODE — real Supabase realtime
     isDemoMode.current = false;
     async function connectRealtime() {
       try {
@@ -322,7 +299,6 @@ export default function HomeClient({
           onPresenceUpdate: (count) => setPresenceCount(count),
         });
         channelRef.current = channel;
-        setChatConnected(true);
       } catch {
         isDemoMode.current = true;
       }
@@ -359,15 +335,18 @@ export default function HomeClient({
         createdAt: new Date().toISOString(),
       };
 
+      // Primary V3 path: Cloudflare PartyServer Edge WebSocket (30s batched persistence)
       if (sendSyncedChat(message.id, content)) {
         return;
       }
 
+      // Demo mode: purely local — never touch Supabase
       if (isDemoMode.current || !channelRef.current) {
         appendUniqueMessage(message);
         return;
       }
 
+      // Live mode fallback: Supabase Realtime broadcast + persist
       try {
         const { sendChatMessage, persistMessage } = await import(
           "@/lib/realtime/chat"
@@ -392,420 +371,518 @@ export default function HomeClient({
     ]
   );
 
-  const highBeamTotal =
-    room.reactionTallies.highBeams +
-    (room.syncMode !== "partyserver" && localHighBeamsOn ? 1 : 0);
-  const hazardTotal =
-    room.reactionTallies.hazards +
-    (room.syncMode !== "partyserver" && localHazardsOn ? 1 : 0);
-  const totalLotCars = Math.max(18, displayedPresenceCount);
-  const encoreThreshold = Math.max(1, Math.ceil(totalLotCars * 0.25));
-  const skipThreshold = Math.max(2, Math.ceil(totalLotCars * 0.5));
+  const handleInputSubmit = useCallback(
+    (e?: React.FormEvent) => {
+      if (e) e.preventDefault();
+      const trimmed = inputValue.trim();
+      if (!trimmed) return;
+      triggerSendPulse();
+      handleSendMessage(trimmed);
+      setInputValue("");
+    },
+    [inputValue, handleSendMessage, triggerSendPulse]
+  );
 
   return (
-    <div
-      ref={stageRef}
-      className="relative w-screen min-h-screen lg:h-screen bg-[#02000a] text-white flex flex-col overflow-x-hidden lg:overflow-hidden select-none"
-    >
-      {/* ── Modals & Drawers ── */}
+    <div className="relative w-screen h-screen bg-[#020008] flex items-center justify-center overflow-hidden select-none">
       <AuthModal />
-      <ProfileModal
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-      />
+      <ProfileModal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)} />
       <SubmitClipModal
         isOpen={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
         defaultCreatorName={currentUsername}
-        userId={user?.id}
-        onClipSubmitted={(clipTitle, creator, scout) => {
-          const credit =
-            scout && scout !== creator
-              ? `by ${creator} (Scouted by @${scout})`
-              : `by ${creator}`;
-          handleSendMessage(
-            `🎬 New community stunt submitted: "${clipTitle}" ${credit}! Queued on screen.`
-          );
+        onClipSubmitted={(clipTitle, creator) => {
+          handleSendMessage(`🎬 New community stunt submitted: "${clipTitle}" by ${creator}! Queued on screen.`);
         }}
       />
-      <CarCabinDrawer
-        isOpen={showCabinDrawer}
-        onClose={() => setShowCabinDrawer(false)}
-        cabinCode={cabin.cabinCode}
-        windowsUpFmMode={cabin.windowsUpFmMode}
-        micEnabled={cabin.micEnabled}
-        micError={cabin.micError}
-        isLocalSpeaking={cabin.isLocalSpeaking}
-        passengers={cabin.passengers}
-        cabinNotes={cabin.cabinNotes}
-        onToggleWindowsUpFm={() => cabin.toggleWindowsUpFm()}
-        onToggleMicrophone={() => void cabin.toggleMicrophone()}
-        onOpenOrJoinCabin={(code) => cabin.openOrJoinCabin(code)}
-        onLeaveCabin={() => cabin.leaveCabin()}
-        onSendCabinNote={(text) => cabin.sendCabinNote(text)}
-        onTestVoiceDuck={() => cabin.triggerVoiceDuck()}
-      />
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          LAYER 0: LIVING VICE CITY SKYLINE, ROOFTOP SPONSOR BILLBOARDS,
-          POLICE HELICOPTER SEARCHLIGHTS & 30FPS VIDEO AURA ENGINE
-      ═══════════════════════════════════════════════════════════════════════ */}
-      <SkylineBackground
-        stageRef={stageRef}
-        isPlaying={isVideoPlaying}
-        wantedLevel={wantedLevel}
-        encoreActive={encoreSurgeActive}
-      />
+      {/* ══════════════════════════════════════════════════════════════════
+          MAIN CANVAS — locked to 1408:768 aspect ratio.
+          CSS calc ensures it fills viewport width OR height, whichever
+          hits the boundary first, exactly like object-contain but we
+          maintain full control over child positioning.
+      ══════════════════════════════════════════════════════════════════ */}
+      <div
+        className="relative overflow-hidden"
+        style={{
+          width: "100vw",
+          height: "100vh",
+        }}
+      >
+        {/* ── BACKGROUND: Concept-art fills container via object-fill ── */}
+        <Image
+          src="/images/drive-in-background.jpg"
+          alt="Leonida Vice Drive-In Theater"
+          fill
+          priority
+          unoptimized
+          sizes="100vw"
+          className="object-fill pointer-events-none select-none"
+          draggable={false}
+        />
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          LAYER 1: TOP AMPHITHEATER COMMAND BAR
-      ═══════════════════════════════════════════════════════════════════════ */}
-      <header className="relative z-30 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2 border-b border-[#00f3ff]/20 bg-[#050214]/85 backdrop-blur-md shrink-0">
-        {/* Left: Brand Identity + Live Lot Telemetry + Scout Rank */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-base">🌴</span>
-            <span
-              className="font-[family-name:var(--font-display)] font-black tracking-[0.2em] text-xs sm:text-sm uppercase"
-              style={{
-                color: "#ff007f",
-                textShadow: "0 0 10px rgba(255,0,127,0.7)",
-              }}
-            >
-              LEONIDA DRIVE-IN
-            </span>
-          </div>
-
-          {/* Live Cars Parked Pill */}
-          <div className="flex items-center gap-1.5 bg-black/70 border border-[#39ff14]/40 rounded-full px-2.5 py-0.5">
-            <span className="relative flex h-2 w-2">
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: STATUS BAR  (top-right, outside painted elements)
+        ═══════════════════════════════════════════════════════════════ */}
+        <div className="absolute top-[2%] right-[1.5%] z-40 flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-black/70 border border-[#00f3ff]/25 rounded-full px-2.5 py-0.5">
+            <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#39ff14] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#39ff14]" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#39ff14]" />
             </span>
-            <span className="font-[family-name:var(--font-display)] font-bold text-[10px] tracking-wider text-[#39ff14]">
-              {totalLotCars} CARS PARKED
-            </span>
-          </div>
-
-          {/* Driver Scout Rank, Vice Cred & Row A Qualification */}
-          <button
-            type="button"
-            onClick={() => setShowProfileModal(true)}
-            className="hidden sm:flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-[#0c0724]/90 hover:bg-[#160d3d] border border-[#00f3ff]/35 transition-colors cursor-pointer"
-            title="Open Driver Garage, Custom License Plate & 3D Horn Selector"
-          >
             <span
-              className="font-[family-name:var(--font-display)] font-bold text-[10px]"
-              style={{ color: economy.rank.color }}
+              className="font-[family-name:var(--font-chat)] tracking-wider text-[#39ff14]"
+              style={{ fontSize: "clamp(8px,0.85vw,11px)" }}
             >
-              {economy.rank.badge} {economy.rank.title}
+              {displayedPresenceCount} CARS PARKED
             </span>
-            <span className="text-[#ffdd00] font-[family-name:var(--font-display)] font-black text-[10px]">
-              {economy.viceCred} CRED
-            </span>
-            <span className="text-[10px] font-[family-name:var(--font-chat)] text-[#00f3ff]">
-              🔥{economy.streakDays}d
-            </span>
-            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-black/60 text-[#ffdd00] border border-[#ffdd00]/40">
-              {economy.licensePlate}
-            </span>
-          </button>
-        </div>
-
-        {/* Center: 48-Hour Vice City Tow-Truck Impound Warning (if active) */}
-        {economy.towStatus !== "safe" && (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#ff6b00]/20 border border-[#ffdd00] text-white text-[10px] font-[family-name:var(--font-chat)] shadow-[0_0_15px_rgba(255,107,0,0.35)]">
-            <span>🚚</span>
-            <span className="truncate max-w-[260px] sm:max-w-md">
-              <strong className="text-[#ffdd00] font-[family-name:var(--font-display)]">
-                VICE CITY TOWING:
-              </strong>{" "}
-              {economy.towStatus === "impounded"
-                ? "Row A spot impounded after 48h inactivity!"
-                : `Row A lease expires in ${economy.hoursUntilTow}h!`}
-            </span>
-            <button
-              type="button"
-              onClick={() => dismissTowImpoundNotice()}
-              className="px-2 py-0.5 rounded bg-[#ffdd00] text-black font-[family-name:var(--font-display)] font-black text-[9px] uppercase cursor-pointer shrink-0"
-            >
-              RECLAIM SPOT
-            </button>
           </div>
-        )}
-
-        {/* Right: Submit Clip, 4-Seat Cabin, Projector Toggle & Garage */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
-            type="button"
+            onClick={() => setIsVideoPlaying((p) => !p)}
+            className="bg-black/70 border border-[#00f3ff]/25 rounded-full px-2 py-0.5 text-[#00f3ff] hover:text-[#ff007f] hover:border-[#ff007f]/30 transition-colors font-[family-name:var(--font-chat)]"
+            style={{ fontSize: "clamp(7px,0.75vw,10px)" }}
+            title="Toggle screen"
+          >
+            {isVideoPlaying ? "📺 LIVE" : "🖼️ ART"}
+          </button>
+          <button
             onClick={() => setShowSubmitModal(true)}
-            className="px-2.5 py-1 rounded-full bg-[#ff007f]/25 hover:bg-[#ff007f]/40 border border-[#ff007f] text-white font-[family-name:var(--font-display)] font-bold text-[10px] tracking-wider flex items-center gap-1 shadow-[0_0_12px_rgba(255,0,127,0.35)] transition-all cursor-pointer"
+            className="bg-black/70 border border-[#ff007f]/50 hover:border-[#ff007f] rounded-full px-2.5 py-0.5 text-[#ff007f] hover:text-white hover:bg-[#ff007f]/20 transition-all font-[family-name:var(--font-chat)] flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,127,0.25)]"
+            style={{ fontSize: "clamp(7px,0.75vw,10px)" }}
+            title="Submit your GTA VI stunt clip to play on screen"
           >
             <span>🎬</span>
-            <span>SUBMIT CLIP (+50 CRED)</span>
+            <span>SUBMIT CLIP</span>
           </button>
-
           <button
-            type="button"
-            onClick={() => setShowCabinDrawer(true)}
-            className="px-2.5 py-1 rounded-full bg-[#00f3ff]/15 hover:bg-[#00f3ff]/30 border border-[#00f3ff]/50 text-[#00f3ff] font-[family-name:var(--font-display)] font-bold text-[10px] tracking-wider flex items-center gap-1 transition-all cursor-pointer"
-          >
-            <span>📻</span>
-            <span className="hidden md:inline">
-              {cabin.cabinCode ? `CABIN ${cabin.cabinCode}` : "4-SEAT CABIN"}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsVideoPlaying((p) => !p)}
-            className="px-2.5 py-1 rounded-full bg-black/70 border border-white/20 hover:border-[#00f3ff] text-[#00f3ff] font-[family-name:var(--font-display)] font-bold text-[10px] tracking-wider transition-colors cursor-pointer"
-            title="Toggle Drive-In Projector"
-          >
-            {isVideoPlaying ? "📺 LIVE" : "🖼️ STANDBY"}
-          </button>
-
-          <button
-            type="button"
             onClick={() => setShowProfileModal(true)}
-            className="px-2.5 py-1 rounded-full bg-black/70 border border-[#ffdd00]/40 hover:border-[#ffdd00] text-[#ffdd00] font-[family-name:var(--font-display)] font-bold text-[10px] tracking-wider transition-colors cursor-pointer"
-            title="Customize Vehicle, License Plate & 3D Horn"
+            className="bg-black/70 border border-[#00f3ff]/25 rounded-full px-2 py-0.5 text-[#00f3ff] hover:text-[#ffdd00] hover:border-[#ffdd00]/30 transition-colors font-[family-name:var(--font-chat)]"
+            style={{ fontSize: "clamp(7px,0.75vw,10px)" }}
+            title="Profile Settings"
           >
-            ⚙ GARAGE
+            ⚙
           </button>
         </div>
-      </header>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          LAYER 2: MAIN WIDESCREEN SPLIT STAGE
-          Left/Center: Giant Drive-In Marquee + 16:9 Screen + 3-Tier Curved Amphitheater Lot
-          Right Sidebar: CRT Chat Terminal + Context-Aware Affiliate Gear
-      ═══════════════════════════════════════════════════════════════════════ */}
-      <main className="relative z-20 flex-1 grid grid-cols-1 lg:grid-cols-[1fr_350px] xl:grid-cols-[1fr_385px] gap-3 px-2 sm:px-4 py-2 min-h-0 overflow-y-auto lg:overflow-hidden">
-        {/* ── LEFT / CENTER COLUMN: DRIVE-IN SCREEN TOWER & 3-TIER CURVED LOT ── */}
-        <div className="flex flex-col justify-between min-h-0 gap-1">
-          {/* 1. Giant Angled Drive-In Screen Tower & Live Broadcast Marquee */}
-          <div className="w-full max-w-[820px] mx-auto shrink-0">
-            <NeonMarquee
-              wantedLevel={wantedLevel}
-              onChangeWantedLevel={setWantedLevel}
-              encoreActive={encoreSurgeActive}
-              empGlitchActive={empGlitchActive}
-              nowPlayingBar={
-                <NowPlaying
-                  item={isVideoPlaying ? currentVideoItem : null}
-                  syncMode={room.syncMode}
-                />
-              }
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: MOVIE SCREEN
+            Screen:      L=26.07%, T=18.23%, W=48.01%, H=35.16%
+            Now Playing: L=26.07%, T=53.39%, W=48.01%, H=2.5%
+            VideoEngine handles seamless double-buffer HLS/MP4 playback.
+        ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute z-10 overflow-hidden"
+          style={{
+            left: "26.07%",
+            top: "18.23%",
+            width: "48.01%",
+            height: "35.16%",
+            background: "#000",
+          }}
+        >
+          {isVideoPlaying ? (
+            <>
+              <VideoEngine
+                onItemChange={setCurrentVideoItem}
+                modalOpen={anyModalOpen}
+                syncMode={room.syncMode}
+                syncedCurrent={room.isSynced ? room.current : syncGaveUp ? undefined : null}
+                syncedNext={room.isSynced ? room.next : syncGaveUp ? undefined : null}
+                clipStartTimestamp={room.clipStartTimestamp}
+                getSyncedOffsetSec={room.getSyncedOffsetSec}
+                onReportDuration={room.reportClipDuration}
+                onRefreshSync={room.refreshSync}
+              />
+              {/* CRT scanline overlay */}
+              <div
+                className="absolute inset-0 pointer-events-none z-10 opacity-15"
+                style={{
+                  background:
+                    "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,1) 2px,rgba(0,0,0,1) 4px)",
+                  mixBlendMode: "multiply",
+                }}
+              />
+            </>
+          ) : (
+            <button
+              onClick={() => setIsVideoPlaying(true)}
+              className="w-full h-full flex items-center justify-center bg-black group"
             >
-              {isVideoPlaying ? (
-                <VideoEngine
-                  onItemChange={setCurrentVideoItem}
-                  modalOpen={anyModalOpen}
-                  syncMode={room.syncMode}
-                  syncedCurrent={
-                    room.isSynced
-                      ? room.current
-                      : syncGaveUp
-                      ? undefined
-                      : null
-                  }
-                  syncedNext={
-                    room.isSynced ? room.next : syncGaveUp ? undefined : null
-                  }
-                  clipStartTimestamp={room.clipStartTimestamp}
-                  getSyncedOffsetSec={room.getSyncedOffsetSec}
-                  onReportDuration={room.reportClipDuration}
-                  onRefreshSync={room.refreshSync}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsVideoPlaying(true)}
-                  className="w-full h-full flex flex-col items-center justify-center bg-[#05010f] gap-2 group cursor-pointer"
-                >
-                  <span className="text-2xl">📽️</span>
-                  <span className="bg-[#ff007f]/20 border border-[#ff007f] px-4 py-1.5 rounded text-[#ff007f] group-hover:bg-[#ff007f] group-hover:text-white tracking-widest font-[family-name:var(--font-display)] font-black text-xs transition-all shadow-[0_0_20px_rgba(255,0,127,0.5)]">
-                    ▶ IGNITE DRIVE-IN PROJECTOR
-                  </span>
-                </button>
-              )}
-            </NeonMarquee>
-          </div>
-
-          {/* 2. 3-Tier Curved Amphitheater Vehicle Field (Row A / Row B / Row C) */}
-          <div className="relative w-full max-w-[1060px] mx-auto flex-1 flex items-center">
-            <VehicleField
-              remoteVehicles={room.vehicles}
-              localDriver={{
-                userId: currentUserId,
-                username: currentUsername,
-                vehicleType: currentBadge,
-                badgeColor: currentBadgeColor,
-                licensePlate: economy.licensePlate,
-                viceCred: economy.viceCred,
-                streakDays: economy.streakDays,
-                hoursUntilRowATow: economy.hoursUntilTow,
-                highBeamsOn: localHighBeamsOn,
-                hazardsOn: localHazardsOn,
-                cabinUnlocked: cabin.cabinUnlocked,
-                cabinCode: cabin.cabinCode,
-              }}
-              activeHornSeatId={activeHornSeatId}
-              onToggleLocalHighBeams={handleToggleHighBeams}
-              onToggleLocalHazards={handleToggleHazards}
-              onHonkHorn={(panX, zDepth, seatId) =>
-                handleHonkHorn(panX, zDepth, seatId)
-              }
-              onOpenCabinDrawer={(joinCode) => {
-                if (joinCode) cabin.openOrJoinCabin(joinCode);
-                setShowCabinDrawer(true);
-              }}
-            />
-          </div>
-
-          {/* 3. Tactile Vehicle Dashboard Control Bar */}
-          <div className="w-full max-w-[940px] mx-auto shrink-0 pt-0.5">
-            <div
-              className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-xl"
-              style={{
-                background:
-                  "linear-gradient(180deg, rgba(12, 6, 32, 0.92) 0%, rgba(5, 3, 16, 0.96) 100%)",
-                border: "1px solid rgba(0, 243, 255, 0.35)",
-                boxShadow:
-                  "0 0 24px rgba(0, 0, 0, 0.8), inset 0 0 12px rgba(0, 243, 255, 0.08)",
-              }}
-            >
-              {/* Left: Primary Vehicle Crowd Reactions */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* High-Beams [SPACE] */}
-                <button
-                  type="button"
-                  onClick={handleToggleHighBeams}
-                  className="px-2.5 py-1 rounded-lg font-[family-name:var(--font-display)] font-black text-[10px] tracking-wider uppercase flex items-center gap-1.5 transition-all cursor-pointer"
-                  style={{
-                    background: localHighBeamsOn
-                      ? "rgba(255, 221, 0, 0.25)"
-                      : "rgba(255, 255, 255, 0.05)",
-                    color: localHighBeamsOn ? "#ffdd00" : "#ffffffdd",
-                    border: localHighBeamsOn
-                      ? "1px solid #ffdd00"
-                      : "1px solid rgba(255, 255, 255, 0.15)",
-                    boxShadow: localHighBeamsOn
-                      ? "0 0 14px rgba(255, 221, 0, 0.45)"
-                      : "none",
-                  }}
-                  title="Flash High-Beams toward the screen (>25% triggers Marquee Encore Surge)"
-                >
-                  <span>💡</span>
-                  <span>HIGH-BEAMS</span>
-                  <span className="text-[8px] px-1 rounded bg-black/50 text-[#ffdd00]">
-                    {highBeamTotal}/{encoreThreshold} [SPACE]
-                  </span>
-                </button>
-
-                {/* 3D Spatial Horn [H] */}
-                <button
-                  type="button"
-                  onClick={() => handleHonkHorn()}
-                  className="px-2.5 py-1 rounded-lg font-[family-name:var(--font-display)] font-black text-[10px] tracking-wider uppercase flex items-center gap-1.5 bg-white/5 hover:bg-[#00f3ff]/20 text-[#00f3ff] border border-[#00f3ff]/35 transition-all cursor-pointer"
-                  title="Honk 3D Spatial Horn across the amphitheater lot"
-                >
-                  <span>🔊</span>
-                  <span>3D HORN</span>
-                  <span className="text-[8px] px-1 rounded bg-black/50 text-[#00f3ff]">
-                    [H]
-                  </span>
-                </button>
-
-                {/* Hazard Vote Skip [X] */}
-                <button
-                  type="button"
-                  onClick={handleToggleHazards}
-                  className="px-2.5 py-1 rounded-lg font-[family-name:var(--font-display)] font-black text-[10px] tracking-wider uppercase flex items-center gap-1.5 transition-all cursor-pointer"
-                  style={{
-                    background: localHazardsOn
-                      ? "rgba(255, 107, 0, 0.28)"
-                      : "rgba(255, 255, 255, 0.05)",
-                    color: localHazardsOn ? "#ff6b00" : "#ffffffcc",
-                    border: localHazardsOn
-                      ? "1px solid #ff6b00"
-                      : "1px solid rgba(255, 255, 255, 0.15)",
-                  }}
-                  title="Vote to EMP Skip boring clip (>50% triggers instant cut)"
-                >
-                  <span>⚠️</span>
-                  <span>HAZARD SKIP</span>
-                  <span className="text-[8px] px-1 rounded bg-black/50 text-[#ff6b00]">
-                    {hazardTotal}/{skipThreshold} [X]
-                  </span>
-                </button>
-              </div>
-
-              {/* Right: FM 88.6 Cabin DSP & 4-Seat Spatial Voice Controls */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => cabin.toggleWindowsUpFm()}
-                  className="px-2.5 py-1 rounded-lg font-[family-name:var(--font-display)] font-bold text-[10px] tracking-wider uppercase flex items-center gap-1.5 transition-all cursor-pointer"
-                  style={{
-                    background: cabin.windowsUpFmMode
-                      ? "rgba(0, 243, 255, 0.22)"
-                      : "rgba(255, 255, 255, 0.05)",
-                    color: cabin.windowsUpFmMode ? "#00f3ff" : "#ffffffbb",
-                    border: cabin.windowsUpFmMode
-                      ? "1px solid #00f3ff"
-                      : "1px solid rgba(255, 255, 255, 0.15)",
-                  }}
-                  title="Roll Up the Windows — Warm 950 Hz FM 88.6 Car Cabin Radio Filter [R]"
-                >
-                  <span>🪟</span>
-                  <span>
-                    {cabin.windowsUpFmMode ? "FM 88.6 CABIN ON" : "WINDOWS DOWN"}
-                  </span>
-                  <span className="text-[8px] px-1 rounded bg-black/50">[R]</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCabinDrawer(true)}
-                  className="px-2.5 py-1 rounded-lg font-[family-name:var(--font-display)] font-black text-[10px] tracking-wider uppercase flex items-center gap-1.5 bg-[#ff007f]/20 hover:bg-[#ff007f]/35 text-[#ff007f] border border-[#ff007f]/50 transition-all cursor-pointer"
-                >
-                  <span>📻</span>
-                  <span>
-                    {cabin.cabinUnlocked && cabin.cabinCode
-                      ? `CREW: ${cabin.cabinCode}`
-                      : "UNLOCK CABIN"}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 border border-[#ff007f]/50 px-4 py-2 rounded text-[#ff007f] tracking-wider font-[family-name:var(--font-display)] font-bold shadow-[0_0_20px_rgba(255,0,127,0.5)]" style={{fontSize:"clamp(9px,0.9vw,13px)"}}>
+                ▶ START PROJECTOR
+              </span>
+            </button>
+          )}
         </div>
 
-        {/* ── RIGHT SIDEBAR COLUMN: CRT CHAT TERMINAL & DYNAMIC AFFILIATE GEAR ── */}
-        <aside className="flex flex-col gap-2.5 min-h-[480px] lg:min-h-0 lg:h-full overflow-hidden">
-          <ChatTerminal
-            messages={displayMessages}
-            onSendMessage={handleSendMessage}
-            presenceCount={totalLotCars}
-            isConnected={room.isSynced || chatConnected}
-            currentUserId={currentUserId}
-            currentUsername={currentUsername}
-            isAuthenticated={isAuthenticated}
-            inputError={inputError}
-            onOpenAuth={() => setShowAuthModal(true)}
-            onSignOut={() => signOut()}
-            onOpenProfile={() => setShowProfileModal(true)}
-            onInputFocusChange={setInputFocused}
+        {/* Now Playing bar — just below the screen bezel */}
+        <div
+          className="absolute z-20 pointer-events-none"
+          style={{
+            left: "26.07%",
+            top: "53.39%",
+            width: "48.01%",
+            height: "2.2%",
+          }}
+        >
+          <NowPlaying
+            item={isVideoPlaying ? currentVideoItem : null}
+            syncMode={room.syncMode}
           />
+        </div>
 
-          <AffiliateWidget
-            activeCategory={currentVideoItem?.category}
-            activeClipTitle={currentVideoItem?.title}
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: POPULAR TOPICS  — INVISIBLE HIT AREAS ONLY
+            Zero visible rendering. Pure transparent click targets.
+            The painted art already shows the text — we never duplicate it.
+        ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute z-20"
+          style={{
+            left: "12.43%",
+            top: "31.51%",
+            width: "8.38%",
+            height: "17.58%",
+          }}
+        >
+          {/* Three fully transparent hit zones — no bg, no border, no outline, no hover style */}
+          {(["#Maps ", "#Vehicles ", "#Story "] as const).map(
+            (tag, i) => (
+              <button
+                key={tag}
+                onClick={() => setInputValue((v) => `${v}${tag}`)}
+                title={`Topic: ${tag.replace("#", "").trim()}`}
+                style={{
+                  position: "absolute",
+                  inset: "auto 0 auto 0",
+                  top: `${38 + i * 20}%`,
+                  height: "20%",
+                  background: "none",
+                  border: "none",
+                  outline: "none",
+                  cursor: "pointer",
+                  WebkitTapHighlightColor: "transparent",
+                  boxShadow: "none",
+                  padding: 0,
+                  margin: 0,
+                }}
+              />
+            )
+          )}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: JOIN BUTTON
+            Covers ONLY the small painted "Button" pill inside the right
+            wing panel. The "JOIN THE CONVERSATION" label is painted art
+            — we never render text on top of that area.
+            Pixel rect: L=1100, T=326, W=65, H=30 → L=78.13%, T=42.45%
+        ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute z-20"
+          style={{
+            left: "78.13%",
+            top: "42.45%",
+            width: "4.62%",
+            height: "3.91%",
+          }}
+        >
+          {isAuthenticated && profile ? (
+            <button
+              onClick={() => signOut()}
+              style={{
+                width: "100%",
+                height: "100%",
+                background: "rgba(26,5,53,0.85)",
+                border: "none",
+                outline: "none",
+                cursor: "pointer",
+                color: "#ff007f",
+                fontFamily: "var(--font-display)",
+                fontWeight: 900,
+                letterSpacing: "0.1em",
+                fontSize: "clamp(6px,0.65vw,9px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "3px",
+              }}
+              title={`Exit — ${profile.username}`}
+            >
+              EXIT
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              style={{
+                width: "100%",
+                height: "100%",
+                background: "rgba(26,5,53,0.85)",
+                border: "none",
+                outline: "none",
+                cursor: "pointer",
+                color: "#ffffff",
+                fontFamily: "var(--font-display)",
+                fontWeight: 900,
+                letterSpacing: "0.1em",
+                fontSize: "clamp(6px,0.65vw,9px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "3px",
+                WebkitTapHighlightColor: "transparent",
+              }}
+              title="Join the Conversation"
+            >
+              JOIN
+            </button>
+          )}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: FULL CHAT PANEL (header + messages body)
+            The painted "CHAT ROOM – LIVE FEED" header AND the painted
+            demo messages below it ALL live between y=425–515 in the
+            1408×768 image. We must cover the entire band with an opaque
+            overlay so zero painted text bleeds through.
+
+            Full panel: L=270, T=425, W=870, H=90 → 1408×768
+            Pct:        L=19.18%, T=55.34%, W=61.79%, H=11.72%
+
+            Inside we render our own HTML header strip + scrollable body.
+        ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute z-20 overflow-hidden flex flex-col"
+          style={{
+            left: "19.18%",
+            top: "55.34%",
+            width: "61.79%",
+            height: "14.50%",
+            background: "#08091e",
+          }}
+        >
+          {/* ── HTML header row — replaces painted "CHAT ROOM – LIVE FEED" ── */}
+          <div
+            className="shrink-0 flex items-center justify-center"
+            style={{
+              height: "28%",
+              background: "#0a0b26",
+              borderBottom: "1px solid rgba(0,243,255,0.25)",
+            }}
+          >
+            <span
+              className="font-[family-name:var(--font-display)] font-black tracking-[0.2em] uppercase"
+              style={{
+                fontSize: "clamp(7px,0.8vw,11px)",
+                color: "#ffdd00",
+                textShadow: "0 0 8px rgba(255,221,0,0.7)",
+              }}
+            >
+              ● CHAT ROOM – LIVE FEED
+            </span>
+          </div>
+
+          {/* ── Scrollable messages body ── */}
+          <div
+            ref={chatScrollRef}
+            onScroll={handleChatScroll}
+            className="flex-1 overflow-y-auto px-2 py-1 flex flex-col justify-start"
+            style={{ scrollBehavior: "smooth", scrollbarWidth: "none" }}
+          >
+          <AnimatePresence initial={false}>
+            {displayMessages.map((msg) => (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="flex items-baseline gap-1 leading-none shrink-0"
+                style={{ paddingBottom: "2px" }}
+              >
+                <span
+                  className="font-[family-name:var(--font-display)] font-bold shrink-0"
+                  style={{
+                    fontSize: "clamp(8px,0.8vw,11px)",
+                    color: msg.isAnnouncement
+                      ? "#ffdd00"
+                      : msg.badgeColor || "#00f3ff",
+                    textShadow: `0 0 4px ${
+                      msg.isAnnouncement
+                        ? "#ffdd0077"
+                        : (msg.badgeColor || "#00f3ff") + "77"
+                    }`,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {msg.username}:
+                </span>
+                <span
+                  style={{
+                    fontSize: "clamp(8px,0.8vw,11px)",
+                    fontFamily: "var(--font-chat)",
+                    color: msg.isAnnouncement ? "#ffea75" : "#e0e0e0",
+                    textShadow: "0 0 3px rgba(255,255,255,0.2)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {msg.content}
+                </span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          </div>
+
+          {/* Live scroll button */}
+          {!autoScroll && (
+            <button
+              onClick={() => {
+                if (chatScrollRef.current) {
+                  chatScrollRef.current.scrollTop =
+                    chatScrollRef.current.scrollHeight;
+                  setAutoScroll(true);
+                }
+              }}
+              className="absolute bottom-1 right-1 bg-[#ff007f] text-white font-[family-name:var(--font-chat)] px-1 py-0 rounded-full z-30"
+              style={{ fontSize: "clamp(7px,0.7vw,9px)" }}
+            >
+              ↓
+            </button>
+          )}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: INPUT FIELD
+            Scanned: L=472, T=676, W=368, H=50 → 1408×768
+            Pct: L=33.52%, T=88.02%, W=26.14%, H=6.51%
+            Background: #07081a sampled from painted console keyboard area
+        ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute z-30"
+          style={{
+            left: "33.52%",
+            top: "88.02%",
+            width: "26.14%",
+            height: "6.51%",
+          }}
+        >
+          {inputError && (
+            <div className="absolute -top-5 left-0 right-0 text-center pointer-events-none z-40">
+              <span
+                className="text-[#ff6b00] font-[family-name:var(--font-chat)] bg-black/90 px-2 py-0.5 rounded border border-[#ff6b00]/50"
+                style={{ fontSize: "clamp(7px,0.7vw,9px)" }}
+              >
+                ⚠ {inputError}
+              </span>
+            </div>
+          )}
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            placeholder={
+              isLoading
+                ? "Tuning radio..."
+                : isAuthenticated
+                ? `Chat as ${currentUsername}...`
+                : "TYPE YOUR MESSAGE..."
+            }
+            maxLength={500}
+            autoComplete="off"
+            className="w-full h-full outline-none border-none text-white font-[family-name:var(--font-chat)] tracking-wider px-2 focus:ring-0 transition-all"
+            style={{
+              fontSize: "clamp(9px,0.9vw,13px)",
+              background: "#07081a",
+              caretColor: "#00f3ff",
+              boxShadow: inputFocused
+                ? "inset 0 0 0 1px rgba(0,243,255,0.6), 0 0 12px rgba(0,243,255,0.25)"
+                : "none",
+              transition: "box-shadow 0.2s ease",
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleInputSubmit();
+              }
+            }}
           />
-        </aside>
-      </main>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: SEND BUTTON
+            Scanned: L=851, T=676, W=89, H=50 → 1408×768
+            Pct: L=60.44%, T=88.02%, W=6.32%, H=6.51%
+            The painted "SEND" label is visible in the art — we match it.
+        ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute z-30"
+          style={{
+            left: "60.44%",
+            top: "88.02%",
+            width: "6.32%",
+            height: "6.51%",
+          }}
+        >
+          <button
+            onClick={() => handleInputSubmit()}
+            disabled={!inputValue.trim()}
+            className="w-full h-full flex items-center justify-center font-[family-name:var(--font-display)] font-black tracking-widest uppercase active:scale-95 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+            style={{
+              fontSize: "clamp(8px,0.85vw,12px)",
+              background: inputValue.trim() ? "#0d4070" : "#0b3460",
+              color: inputValue.trim() ? "#00f3ff" : "#00f3ff88",
+              textShadow: inputValue.trim() ? "0 0 12px rgba(0,243,255,1)" : "none",
+              boxShadow: inputValue.trim()
+                ? "0 0 15px rgba(0,243,255,0.4), inset 0 0 10px rgba(0,243,255,0.1)"
+                : "none",
+              transition: "all 0.15s ease",
+            }}
+          >
+            SEND
+          </button>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            LAYER: KEYBOARD GLOW CANVAS
+            Transparent canvas sits over the painted keyboard console.
+            Each keypress paints a neon glow burst at the QWERTY position.
+            Space → triple pink burst on space bar.
+            Send  → cyan ripple wave across every key.
+
+            Keyboard graphic occupies approx:
+            L=23%, T=93%, W=54%, H=6.5% in the 1408×768 image.
+        ═══════════════════════════════════════════════════════════════ */}
+        <canvas
+          ref={kbCanvasRef}
+          className="absolute pointer-events-none"
+          style={{
+            left: "23%",
+            top: "93%",
+            width: "54%",
+            height: "6.5%",
+            zIndex: 25,
+          }}
+          width={756}
+          height={50}
+        />
+
+        {/* ═══════════════════════════════════════════════════════════════
+            FOOTER DISCLAIMER
+        ═══════════════════════════════════════════════════════════════ */}
+        <div className="absolute bottom-[0.4%] left-0 right-0 text-center pointer-events-none z-20">
+          <p
+            className="text-[#00f3ff]/20 font-[family-name:var(--font-chat)] tracking-wider"
+            style={{ fontSize: "clamp(6px,0.55vw,8px)" }}
+          >
+            LeonidaVice.com • Fan-Made Drive-In Community • Not affiliated with
+            Rockstar Games or Take-Two Interactive.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -10,10 +10,8 @@ interface ChatMessageProps {
 const VEHICLE_ICONS: Record<string, string> = {
   muscle_car: "🚗",
   sports_car: "🏎️",
-  truck: "🚛",
-  synth_coupe: "⚡",
-  lowrider: "🌴",
-  vice_pd: "🚓",
+  truck: "🛻",
+  lowrider: "🚙",
   motorcycle: "🏍️",
   default: "🚗",
 };
@@ -24,67 +22,47 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
   if (message.isAnnouncement) {
     return (
       <motion.div
-        initial={{ opacity: 0, x: -12 }}
+        initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="mx-2 my-1 px-2.5 py-1.5 rounded bg-[#ffdd00]/10 border border-[#ffdd00]/35 text-left"
+        className="px-3 py-1.5 text-center"
       >
-        <span
-          className="text-[#ffdd00] font-[family-name:var(--font-chat)] text-xs leading-snug block"
-          style={{ textShadow: "0 0 8px rgba(255, 221, 0, 0.55)" }}
-        >
+        <span className="text-vice-yellow font-[family-name:var(--font-chat)] text-sm">
           📢 {message.content}
         </span>
       </motion.div>
     );
   }
 
-  const badgeColor = message.badgeColor || "#ff007f";
-
   return (
     <motion.div
-      initial={{ opacity: 0, x: -14 }}
+      initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.18 }}
-      className="group px-3 py-1.5 hover:bg-white/[0.04] transition-colors border-b border-white/[0.03]"
+      transition={{ duration: 0.2 }}
+      className="group px-3 py-1 hover:bg-vice-purple/20 transition-colors"
     >
       <div className="flex items-start gap-2">
-        {/* Vehicle chassis badge */}
-        <span
-          className="text-xs mt-0.5 shrink-0 select-none"
-          title={message.vehicleBadge}
-        >
-          {icon}
-        </span>
+        {/* Vehicle badge */}
+        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            {/* Driver Handle with CRT phosphor glow */}
-            <span
-              className="font-[family-name:var(--font-display)] text-[11px] font-bold tracking-wider truncate"
-              style={{
-                color: badgeColor,
-                textShadow: `0 0 6px ${badgeColor}66`,
-              }}
-            >
-              {message.username}
-            </span>
-
-            {/* Timestamp */}
-            <span className="text-[9px] text-[#00f3ff]/40 font-[family-name:var(--font-chat)] shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-              {new Date(message.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-          </div>
-
-          {/* Message Body with subtle phosphor text shader */}
-          <p
-            className="text-xs text-[#f2f4ff] font-[family-name:var(--font-chat)] break-words leading-relaxed mt-0.5"
-            style={{
-              textShadow: "0 0 4px rgba(0, 243, 255, 0.16)",
-            }}
+          {/* Username */}
+          <span
+            className="font-[family-name:var(--font-display)] text-xs font-bold tracking-wide mr-2"
+            style={{ color: message.badgeColor || "#ff007f" }}
           >
+            {message.username}
+          </span>
+
+          {/* Timestamp */}
+          <span className="text-[10px] text-vice-cyan/30 font-[family-name:var(--font-chat)] opacity-0 group-hover:opacity-100 transition-opacity">
+            {new Date(message.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+
+          {/* Message content */}
+          <p className="text-sm text-gray-200 font-[family-name:var(--font-chat)] break-words leading-relaxed">
             {message.content}
           </p>
         </div>

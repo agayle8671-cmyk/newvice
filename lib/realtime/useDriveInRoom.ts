@@ -515,28 +515,7 @@ export function useDriveInRoom({
     if (ws && ws.readyState === WebSocket.OPEN) {
       const pkt: ClientToServerMessage = { type: "CAR_FLASH", active };
       ws.send(JSON.stringify(pkt));
-      return;
     }
-
-    // Server-clock fallback: update local tally & trigger +15s Encore boost once per clip
-    setReactionTallies((prev) => {
-      const nextBeams = active ? Math.max(1, prev.highBeams + 1) : Math.max(0, prev.highBeams - 1);
-      if (active && !prev.encoreTriggered) {
-        const now = Date.now();
-        clipStartRef.current = Math.min(now, clipStartRef.current + 15_000);
-        setClipStartTimestamp(clipStartRef.current);
-        callbacksRef.current.onEncoreSurge?.(15, nextBeams);
-        return {
-          ...prev,
-          highBeams: nextBeams,
-          encoreTriggered: true,
-        };
-      }
-      return {
-        ...prev,
-        highBeams: nextBeams,
-      };
-    });
   }, []);
 
   const sendHazard = useCallback((active: boolean) => {
@@ -544,28 +523,6 @@ export function useDriveInRoom({
     if (ws && ws.readyState === WebSocket.OPEN) {
       const pkt: ClientToServerMessage = { type: "CAR_HAZARD", active };
       ws.send(JSON.stringify(pkt));
-      return;
-    }
-
-    // Server-clock fallback: when Hazard skip is voted, cut to pre-buffered next clip
-    if (active) {
-      setNext((queuedNext) => {
-        if (queuedNext) {
-          const now = Date.now();
-          currentRef.current = queuedNext;
-          clipStartRef.current = now;
-          setCurrent(queuedNext);
-          setClipStartTimestamp(now);
-          setReactionTallies({
-            highBeams: 0,
-            hazards: 0,
-            occupiedCount: 1,
-            encoreTriggered: false,
-          });
-          callbacksRef.current.onClipTransition?.("emp_skip", queuedNext);
-        }
-        return null;
-      });
     }
   }, []);
 

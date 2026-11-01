@@ -170,21 +170,6 @@ export default function NowPlaying({ item, syncMode }: NowPlayingProps) {
               </span>
             )}
 
-            {/* Crowd High-Beam count */}
-            {typeof item.highBeamCount === "number" && item.highBeamCount > 0 && (
-              <span
-                className="shrink-0 font-[family-name:var(--font-display)] font-bold px-1 rounded"
-                style={{
-                  fontSize: "clamp(5px,0.52vw,7px)",
-                  color: "#ffdd00",
-                  background: "rgba(255,221,0,0.1)",
-                  border: "1px solid rgba(255,221,0,0.3)",
-                }}
-              >
-                💡 {item.highBeamCount}
-              </span>
-            )}
-
             {/* Platform */}
             <span
               className="shrink-0"

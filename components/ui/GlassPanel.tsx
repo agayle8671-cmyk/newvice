@@ -1,23 +1,11 @@
 interface GlassPanelProps {
   children: React.ReactNode;
   className?: string;
-  neonBorder?: "cyan" | "pink" | "none";
 }
 
-export default function GlassPanel({
-  children,
-  className = "",
-  neonBorder = "none",
-}: GlassPanelProps) {
-  const borderClass =
-    neonBorder === "cyan"
-      ? "neon-border-cyan"
-      : neonBorder === "pink"
-      ? "neon-border-pink"
-      : "";
-
+export default function GlassPanel({ children, className = "" }: GlassPanelProps) {
   return (
-    <div className={`glass-panel rounded-lg ${borderClass} ${className}`}>
+    <div className={`glass-panel rounded-lg ${className}`}>
       {children}
     </div>
   );
