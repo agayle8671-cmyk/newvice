@@ -15,6 +15,24 @@ from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
 
+try:
+    from .perceptual_hash import (
+        compute_video_phash,
+        compute_viral_heat_score,
+        find_and_merge_near_duplicate,
+    )
+except ImportError:
+    try:
+        from perceptual_hash import (  # type: ignore
+            compute_video_phash,
+            compute_viral_heat_score,
+            find_and_merge_near_duplicate,
+        )
+    except ImportError:
+        compute_video_phash = None  # type: ignore
+        compute_viral_heat_score = None  # type: ignore
+        find_and_merge_near_duplicate = None  # type: ignore
+
 # Load .env and .env.local from project root
 _dir = os.path.dirname(os.path.abspath(__file__))
 _root = os.path.dirname(_dir)
@@ -174,9 +192,24 @@ def sb_exists(canonical_url: str) -> bool:
 
 def sb_upsert(row: dict) -> bool:
     """
-    Upsert a row into video_catalog.
+    Upsert a row into video_catalog after V3 perceptual near-duplicate check.
+    If a visual duplicate (Hamming <= 10) already exists on another platform,
+    merges into `cross_platform_urls` and boosts `viral_heat_score` instead of
+    cluttering rotation with duplicate re-uploads.
     Returns True on success.
     """
+    if find_and_merge_near_duplicate is not None and row.get("perceptual_hash"):
+        try:
+            merged, _ = find_and_merge_near_duplicate(
+                supabase_url=SUPABASE_URL,
+                sb_headers=SB_HEADERS,
+                candidate_row=row,
+            )
+            if merged:
+                return True
+        except Exception as e:
+            logging.getLogger("crawler.common").debug("pHash merge check skipped: %s", e)
+
     try:
         r = requests.post(
             f"{SUPABASE_URL}/rest/v1/video_catalog",
@@ -208,7 +241,7 @@ def make_row(
     category: str = "gameplay",
     is_approved: bool = True,
 ) -> dict:
-    """Build a video_catalog row dict ready for sb_upsert."""
+    """Build a video_catalog row dict ready for sb_upsert (with 64-bit pHash & Viral Heat Score)."""
     dur = None
     if duration_sec is not None:
         try:
@@ -222,6 +255,23 @@ def make_row(
             views = int(float(view_count))
         except (ValueError, TypeError):
             views = None
+
+    phash = None
+    if compute_video_phash is not None:
+        try:
+            phash = compute_video_phash(
+                media_url=direct_mp4_url or manifest_url,
+                thumbnail_url=thumbnail_url,
+            )
+        except Exception:
+            phash = None
+
+    heat = 0.0
+    if compute_viral_heat_score is not None:
+        try:
+            heat = compute_viral_heat_score(view_count=views, cross_platform_count=1)
+        except Exception:
+            heat = 0.0
 
     return {
         "id":                    stable_id(canonical_url),
@@ -242,6 +292,9 @@ def make_row(
         "is_active":             True,
         "is_approved":           is_approved,
         "play_count":            0,
+        "perceptual_hash":       phash,
+        "viral_heat_score":      heat,
+        "cross_platform_urls":   [],
     }
 
 # ─── yt-dlp manifest extraction ──────────────────────────────────────────────

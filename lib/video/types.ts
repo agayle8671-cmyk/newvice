@@ -14,11 +14,24 @@ export type VideoSource =
   | "nicovideo"
   | "medal"
   | "streamable"
+  | "vimeo"
+  | "bitchute"
+  | "coub"
+  | "imgur"
+  | "soop"
+  | "x"
+  | "modsites"
+  | "community"
   | "direct";
 
 export type VideoCategory =
   | "trailer"
   | "gameplay"
+  | "user_clip"
+  | "mod_showcase"
+  | "rp_drama"
+  | "synthwave"
+  | "pre_launch_archive"
   | "leak"
   | "analysis"
   | "reaction"
@@ -30,9 +43,10 @@ export interface VideoItem {
   source: VideoSource;
 
   // Playback — one of these will be populated
-  youtubeId?: string;    // YouTube IFrame API
+  youtubeId?: string;    // YouTube IFrame API / Official Embed
   manifestUrl?: string;  // HLS .m3u8 or DASH .mpd
   directMp4Url?: string; // Progressive MP4
+  embedUrl?: string;     // Official platform OEmbed / iframe fallback URL
 
   // Metadata
   title: string;
@@ -46,6 +60,12 @@ export interface VideoItem {
   durationSec?: number;
   category: VideoCategory;
   viewCount?: number;
+
+  // V3 Curation & Deduplication Metadata
+  scoutName?: string;
+  viralHeatScore?: number;
+  highBeamCount?: number;
+  perceptualHash?: string;
 
   // Internal
   fetchedAt: string;

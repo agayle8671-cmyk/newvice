@@ -1,13 +1,51 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { VideoItem } from "@/lib/video/types";
+import type { RoomSyncMode } from "@/lib/realtime/useDriveInRoom";
 
 interface NowPlayingProps {
   item: VideoItem | null;
+  syncMode?: RoomSyncMode;
 }
 
-export default function NowPlaying({ item }: NowPlayingProps) {
+export default function NowPlaying({ item, syncMode }: NowPlayingProps) {
+  // ── OS Media Session API (Lock-Screen / AirPods / CarPlay / Media Keys) ──
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    if (!item) {
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+
+    const artwork: MediaImage[] = item.thumbnail
+      ? [{ src: item.thumbnail, sizes: "512x512" }]
+      : [
+          {
+            src: "/images/drive-in-background.jpg",
+            sizes: "1408x768",
+            type: "image/jpeg",
+          },
+        ];
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: item.title || "GTA VI Broadcast",
+        artist: item.scoutName
+          ? `${item.creatorName} • Scouted by ${item.scoutName}`
+          : `${item.creatorName} (${item.platform})`,
+        album: "Leonida Vice Drive-In Theater",
+        artwork,
+      });
+    } catch {
+      // Ignore unsupported MediaMetadata constructor in older WebViews
+    }
+  }, [item]);
+
   return (
     <div
       className="w-full flex items-center gap-2 overflow-hidden"
@@ -45,6 +83,21 @@ export default function NowPlaying({ item }: NowPlayingProps) {
               NOW SHOWING
             </span>
 
+            {/* Sync badge */}
+            {syncMode && syncMode !== "connecting" && (
+              <span
+                className="font-[family-name:var(--font-display)] font-bold tracking-wider uppercase shrink-0 px-1 rounded"
+                style={{
+                  fontSize: "clamp(5px,0.5vw,7px)",
+                  color: "#39ff14",
+                  background: "rgba(57,255,20,0.08)",
+                  border: "1px solid rgba(57,255,20,0.25)",
+                }}
+              >
+                {syncMode === "partyserver" ? "⚡ EDGE" : "● SYNC"}
+              </span>
+            )}
+
             {/* Divider */}
             <span style={{ color: "#ffffff22", fontSize: 10 }}>▸</span>
 
@@ -76,7 +129,7 @@ export default function NowPlaying({ item }: NowPlayingProps) {
               href={item.creatorUrl || item.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 hover:underline"
+              className="shrink-0 hover:underline pointer-events-auto"
               style={{
                 fontSize: "clamp(7px,0.7vw,10px)",
                 fontFamily: "var(--font-chat)",
@@ -87,6 +140,20 @@ export default function NowPlaying({ item }: NowPlayingProps) {
             >
               {item.platformIcon} {item.creatorName}
             </a>
+
+            {/* Scout attribution if community-scouted */}
+            {item.scoutName && (
+              <span
+                className="shrink-0"
+                style={{
+                  fontSize: "clamp(6px,0.6vw,8px)",
+                  fontFamily: "var(--font-chat)",
+                  color: "#ff007fcc",
+                }}
+              >
+                • Scout: {item.scoutName}
+              </span>
+            )}
 
             {/* Platform */}
             <span

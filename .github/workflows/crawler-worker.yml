@@ -1,0 +1,72 @@
+name: LeonidaVice V3 Crawler & Perceptual Hash Worker
+
+on:
+  schedule:
+    # Run every 6 hours to keep all 20 GTA VI sources fresh and deduplicated
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Optional space-separated platforms (leave empty for all 20)"
+        required: false
+        default: ""
+      backfill_phash:
+        description: "Run V3 perceptual hash & viral heat backfill across existing catalog"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  crawl-and-deduplicate:
+    name: Containerized FFmpeg + 64-Bit DCT pHash Ingestion
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+      KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
+      IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
+      GTA6_LAUNCH_DATE: ${{ vars.GTA6_LAUNCH_DATE || '2026-11-19T00:00:00Z' }}
+      GTA6_LAUNCH_MODE: ${{ vars.GTA6_LAUNCH_MODE || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg binary for 1-fps 3x3 storyboard perceptual hashing
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -n 2
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: crawler/requirements.txt
+
+      - name: Install crawler dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r crawler/requirements.txt
+
+      - name: Run 20-platform GTA VI crawler with perceptual deduplication
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::Supabase secrets not configured in GitHub repository settings yet. Running --dry-run filter verification."
+            python -m crawler.run_all --dry-run
+            exit 0
+          fi
+
+          if [ "${{ inputs.backfill_phash }}" = "true" ]; then
+            python -m crawler.backfill_phash
+          fi
+
+          if [ -n "${{ inputs.platforms }}" ]; then
+            python -m crawler.run_all --platforms ${{ inputs.platforms }}
+          else
+            python -m crawler.run_all
+          fi

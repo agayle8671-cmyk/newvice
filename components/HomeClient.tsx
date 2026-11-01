@@ -10,6 +10,8 @@ import SubmitClipModal from "@/components/drive-in/SubmitClipModal";
 import VideoEngine from "@/components/video-engine/VideoEngine";
 import NowPlaying from "@/components/video-engine/NowPlaying";
 import { filterMessage } from "@/lib/moderation/filter";
+import { useDriveInRoom } from "@/lib/realtime/useDriveInRoom";
+import { getDriveInAudioGraph } from "@/lib/audio/DriveInAudioGraph";
 import type { ChatMessage } from "@/lib/realtime/chat";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -67,7 +69,7 @@ export default function HomeClient({
   roomTitle,
   videoId = DEFAULT_VIDEO_ID,
 }: HomeClientProps) {
-  const { user, profile, isLoading, setShowAuthModal, signOut } = useAuth();
+  const { user, profile, isLoading, showAuthModal, setShowAuthModal, signOut } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [presenceCount, setPresenceCount] = useState(24);
@@ -92,6 +94,86 @@ export default function HomeClient({
   const currentBadge = profile?.vehicle_badge ?? "muscle_car";
   const currentBadgeColor = profile?.badge_color ?? "#ff007f";
   const isAuthenticated = !!user;
+
+  const appendUniqueMessage = useCallback((incoming: ChatMessage) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === incoming.id)) return prev;
+      return [...prev.slice(-150), incoming];
+    });
+  }, []);
+
+  // ── V3 Authoritative Edge Room Coordinator (PartyServer DO + Server-Clock Fallback) ──
+  const room = useDriveInRoom({
+    roomSlug,
+    userId: currentUserId,
+    username: currentUsername,
+    vehicleType: currentBadge,
+    badgeColor: currentBadgeColor,
+    onChatMessage: (synced) => {
+      appendUniqueMessage({
+        id: synced.id,
+        userId: synced.userId,
+        username: synced.username,
+        vehicleBadge: synced.vehicleBadge,
+        badgeColor: synced.badgeColor,
+        content: synced.content,
+        isAnnouncement: Boolean(synced.isAnnouncement),
+        createdAt: synced.createdAt,
+      });
+    },
+    onHornTrigger: (_seatId, hornId, panX, zDepth) => {
+      getDriveInAudioGraph().playSpatialHorn(hornId, panX, zDepth);
+    },
+    onEncoreSurge: (bonusSec, highBeams) => {
+      appendUniqueMessage({
+        id: `encore_${Date.now()}`,
+        userId: "system",
+        username: "DRIVE-IN",
+        vehicleBadge: "vice_pd",
+        badgeColor: "#ffdd00",
+        content: `💡 CROWD ENCORE! ${highBeams} High-Beams flashed — +${bonusSec}s replay boost!`,
+        isAnnouncement: true,
+        createdAt: new Date().toISOString(),
+      });
+    },
+    onClipTransition: (reason, nextClip) => {
+      if (reason === "emp_skip") {
+        appendUniqueMessage({
+          id: `emp_${Date.now()}`,
+          userId: "system",
+          username: "DRIVE-IN",
+          vehicleBadge: "vice_pd",
+          badgeColor: "#ff007f",
+          content: `⚡ CROWD HAZARD SKIP — Cutting straight to "${nextClip.title}"!`,
+          isAnnouncement: true,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    },
+  });
+
+  // Hydrate recent room chat snapshot on Edge DO connect
+  useEffect(() => {
+    if (room.recentChat.length === 0) return;
+    for (const synced of room.recentChat) {
+      appendUniqueMessage({
+        id: synced.id,
+        userId: synced.userId,
+        username: synced.username,
+        vehicleBadge: synced.vehicleBadge,
+        badgeColor: synced.badgeColor,
+        content: synced.content,
+        isAnnouncement: Boolean(synced.isAnnouncement),
+        createdAt: synced.createdAt,
+      });
+    }
+  }, [room.recentChat, appendUniqueMessage]);
+
+  const displayedPresenceCount =
+    room.syncMode === "partyserver" && room.vehicles.length > 0
+      ? room.vehicles.length
+      : presenceCount;
+  const anyModalOpen = showAuthModal || showProfileModal || showSubmitModal;
 
   // ── Keyboard glow canvas ────────────────────────────────────────────────────
   const kbCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -222,8 +304,7 @@ export default function HomeClient({
       try {
         const { subscribeToChatRoom } = await import("@/lib/realtime/chat");
         const channel = subscribeToChatRoom(roomSlug, currentUserId, {
-          onMessage: (message) =>
-            setMessages((prev) => [...prev.slice(-150), message]),
+          onMessage: (message) => appendUniqueMessage(message),
           onPresenceUpdate: (count) => setPresenceCount(count),
         });
         channelRef.current = channel;
@@ -263,13 +344,18 @@ export default function HomeClient({
         createdAt: new Date().toISOString(),
       };
 
-      // Demo mode: purely local — never touch Supabase
-      if (isDemoMode.current || !channelRef.current) {
-        setMessages((prev) => [...prev.slice(-150), message]);
+      // Primary V3 path: Cloudflare PartyServer Edge WebSocket (30s batched persistence)
+      if (room.sendSyncedChat(message.id, content)) {
         return;
       }
 
-      // Live mode: broadcast + persist
+      // Demo mode: purely local — never touch Supabase
+      if (isDemoMode.current || !channelRef.current) {
+        appendUniqueMessage(message);
+        return;
+      }
+
+      // Live mode fallback: Supabase Realtime broadcast + persist
       try {
         const { sendChatMessage, persistMessage } = await import(
           "@/lib/realtime/chat"
@@ -279,7 +365,7 @@ export default function HomeClient({
           persistMessage(roomSlug, currentUserId, content).catch(() => {});
         }
       } catch {
-        setMessages((prev) => [...prev.slice(-150), message]);
+        appendUniqueMessage(message);
       }
     },
     [
@@ -289,6 +375,8 @@ export default function HomeClient({
       currentBadgeColor,
       isAuthenticated,
       roomSlug,
+      room,
+      appendUniqueMessage,
     ]
   );
 
@@ -355,7 +443,7 @@ export default function HomeClient({
               className="font-[family-name:var(--font-chat)] tracking-wider text-[#39ff14]"
               style={{ fontSize: "clamp(8px,0.85vw,11px)" }}
             >
-              {presenceCount} CARS PARKED
+              {displayedPresenceCount} CARS PARKED
             </span>
           </div>
           <button
@@ -403,7 +491,17 @@ export default function HomeClient({
         >
           {isVideoPlaying ? (
             <>
-              <VideoEngine onItemChange={setCurrentVideoItem} />
+              <VideoEngine
+                onItemChange={setCurrentVideoItem}
+                modalOpen={anyModalOpen}
+                syncMode={room.syncMode}
+                syncedCurrent={room.isSynced ? room.current : undefined}
+                syncedNext={room.isSynced ? room.next : undefined}
+                clipStartTimestamp={room.clipStartTimestamp}
+                getSyncedOffsetSec={room.getSyncedOffsetSec}
+                onReportDuration={room.reportClipDuration}
+                onRefreshSync={room.refreshSync}
+              />
               {/* CRT scanline overlay */}
               <div
                 className="absolute inset-0 pointer-events-none z-10 opacity-15"
@@ -436,7 +534,10 @@ export default function HomeClient({
             height: "2.2%",
           }}
         >
-          <NowPlaying item={isVideoPlaying ? currentVideoItem : null} />
+          <NowPlaying
+            item={isVideoPlaying ? currentVideoItem : null}
+            syncMode={room.syncMode}
+          />
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════

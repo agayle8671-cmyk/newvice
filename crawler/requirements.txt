@@ -4,6 +4,7 @@
 requests>=2.31.0
 yt-dlp>=2024.11.04
 python-dotenv>=1.0.0
+Pillow>=10.0.0
 
 # Supabase Python client (used by supabase_setup.py)
 supabase>=2.0.0

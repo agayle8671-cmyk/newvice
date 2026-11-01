@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "leonida-vice-party",
+  "main": "src/server.ts",
+  "compatibility_date": "2025-02-14",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DriveInRoom",
+        "class_name": "DriveInRoomServer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DriveInRoomServer"]
+    }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://ylinzijawuzvnkzucoxf.supabase.co"
+  }
+}

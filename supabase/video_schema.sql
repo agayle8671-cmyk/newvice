@@ -25,9 +25,45 @@ CREATE TABLE IF NOT EXISTS video_catalog (
   play_count       INTEGER DEFAULT 0,
   last_played      TIMESTAMPTZ,
   fetched_at       TIMESTAMPTZ DEFAULT now(),
+  manifest_refreshed_at TIMESTAMPTZ,
   manifest_expires TIMESTAMPTZ,    -- When manifest_url expires (for refresh scheduling)
+  uploaded_at      TIMESTAMPTZ,
+  -- V3 Perceptual Deduplication & Curation Economy
+  perceptual_hash      TEXT,
+  viral_heat_score     DOUBLE PRECISION DEFAULT 0,
+  cross_platform_urls  TEXT[] DEFAULT '{}',
+  high_beam_count      INTEGER DEFAULT 0,
+  scout_user_id        UUID,
+  scout_name           TEXT,
   UNIQUE (source_platform, canonical_url)
 );
+
+-- Index for perceptual hash deduplication
+CREATE INDEX IF NOT EXISTS idx_video_catalog_phash
+  ON video_catalog (perceptual_hash)
+  WHERE perceptual_hash IS NOT NULL;
+
+-- Durable room playback state checkpoint (synced by Cloudflare Durable Objects 30s alarms)
+CREATE TABLE IF NOT EXISTS room_playback_state (
+  room_slug             TEXT PRIMARY KEY,
+  current_video_id      TEXT,
+  next_video_id         TEXT,
+  clip_start_ms         BIGINT NOT NULL DEFAULT 0,
+  high_beam_count       INTEGER NOT NULL DEFAULT 0,
+  hazard_count          INTEGER NOT NULL DEFAULT 0,
+  occupied_vehicles     INTEGER NOT NULL DEFAULT 0,
+  updated_at            TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE room_playback_state ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read room_playback_state"
+  ON room_playback_state FOR SELECT
+  USING (true);
+
+CREATE POLICY "Service role write room_playback_state"
+  ON room_playback_state FOR ALL
+  USING (true);
 
 -- Index for efficient queue queries
 CREATE INDEX IF NOT EXISTS idx_video_catalog_queue
