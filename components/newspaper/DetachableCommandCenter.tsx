@@ -265,6 +265,18 @@ export default function DetachableCommandCenter({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {telemetry?.isForensicHold && (
+              <button
+                type="button"
+                onClick={() =>
+                  window.dispatchEvent(new CustomEvent("lv:resume-live-sync"))
+                }
+                className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[9.5px] font-extrabold uppercase cursor-pointer transition-colors"
+                title="Jump straight back to live synchronized broadcast"
+              >
+                ⚡ LIVE
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void toggleDocumentPiP()}
@@ -275,7 +287,11 @@ export default function DetachableCommandCenter({
             </button>
             <button
               type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              onClick={() => {
+                setIsHeroOutOfView(false);
+                setStickyDismissed(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
               className="px-1.5 py-0.5 bg-white/15 hover:bg-white text-white hover:text-black text-[9.5px] font-bold uppercase cursor-pointer transition-colors"
               title="Scroll back to top broadcast stage"
             >
@@ -283,7 +299,13 @@ export default function DetachableCommandCenter({
             </button>
             <button
               type="button"
-              onClick={() => setStickyDismissed(true)}
+              onClick={() => {
+                if (typeof window !== "undefined" && window.scrollY < 140) {
+                  setIsHeroOutOfView(false);
+                } else {
+                  setStickyDismissed(true);
+                }
+              }}
               className="px-1.5 py-0.5 bg-white/10 hover:bg-[#e04040] text-white text-[9.5px] font-bold cursor-pointer"
               title="Dock back to top stage"
             >
@@ -354,13 +376,24 @@ export default function DetachableCommandCenter({
           <div className="min-h-screen bg-white text-black flex flex-col font-sans select-none">
             {/* PiP Header Masthead */}
             <div className="bg-black text-white px-3 py-2 flex items-center justify-between border-b-2 border-[#e04040]">
-              <div>
-                <span className="bg-[#e04040] text-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-widest mr-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="bg-[#e04040] text-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-widest">
                   LEONIDA VICE PiP
                 </span>
                 <span className="font-mono text-[11px] font-bold text-[#00f3ff]">
                   TC {formatPreciseTimecode(currentTimeSec)} (#{frameNumber})
                 </span>
+                {telemetry?.isForensicHold && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(new CustomEvent("lv:resume-live-sync"))
+                    }
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 text-[9.5px] font-mono font-extrabold uppercase cursor-pointer"
+                  >
+                    ⚡ LIVE SYNC
+                  </button>
+                )}
               </div>
               <button
                 type="button"

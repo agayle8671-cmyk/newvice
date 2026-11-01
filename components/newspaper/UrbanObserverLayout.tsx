@@ -207,6 +207,18 @@ export default function UrbanObserverLayout({
                   </span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {playerTelemetry?.isForensicHold && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.dispatchEvent(new CustomEvent("lv:resume-live-sync"))
+                      }
+                      className="text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 border border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-500 transition-colors cursor-pointer np-ui"
+                      title="Instantly catch back up to the live synchronized broadcast"
+                    >
+                      ⚡ LIVE SYNC
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() =>

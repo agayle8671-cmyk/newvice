@@ -10,6 +10,8 @@ interface OfficialEmbedFallbackProps {
   isMuted: boolean;
   /** Blocks cross-origin iframe from swallowing clicks while any UI modal is open */
   modalOpen?: boolean;
+  /** Incremented when user clicks Live Sync to force iframe reload at fresh live offset */
+  resyncNonce?: number;
 }
 
 export function buildOfficialEmbedUrl(
@@ -57,12 +59,13 @@ export default function OfficialEmbedFallback({
   initialOffsetSec = 0,
   isMuted,
   modalOpen = false,
+  resyncNonce = 0,
 }: OfficialEmbedFallbackProps) {
-  // Memoize on item.id + mute state so the iframe doesn't reload every timeupdate tick
+  // Memoize on item.id + mute state + explicit resyncNonce so iframe doesn't reload every timeupdate tick
   const src = useMemo(
     () => buildOfficialEmbedUrl(item, initialOffsetSec, isMuted),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [item.id, item.youtubeId, item.embedUrl, isMuted]
+    [item.id, item.youtubeId, item.embedUrl, isMuted, resyncNonce]
   );
 
   if (!src) return null;
@@ -70,7 +73,7 @@ export default function OfficialEmbedFallback({
   return (
     <div className="absolute inset-0 z-10 w-full h-full bg-black overflow-hidden">
       <iframe
-        key={`${item.id}-${isMuted ? "muted" : "audio"}`}
+        key={`${item.id}-${isMuted ? "muted" : "audio"}-${resyncNonce}`}
         src={src}
         title={item.title || "Leonida Vice Official Stream"}
         className="w-full h-full border-0"

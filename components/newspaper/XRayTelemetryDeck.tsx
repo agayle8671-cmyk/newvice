@@ -126,9 +126,16 @@ export default function XRayTelemetryDeck({
             TC {formatPreciseTimecode(currentTimeSec)} • FR #{frameNumber} ({fps}fps)
           </span>
           {isForensicHold && (
-            <span className="bg-amber-400 text-black px-1.5 py-0.5 text-[9.5px] font-mono font-extrabold uppercase">
-              HOLD / MANUAL SEEK
-            </span>
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("lv:resume-live-sync"))
+              }
+              className="bg-emerald-500 hover:bg-emerald-400 text-black px-2 py-0.5 text-[9.5px] font-mono font-extrabold uppercase cursor-pointer transition-colors"
+              title="Paused or time-shifted — click to jump straight back to the live broadcast"
+            >
+              ⚡ LIVE RESYNC (HOLD)
+            </button>
           )}
         </div>
 

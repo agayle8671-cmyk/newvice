@@ -88,6 +88,8 @@ export default function HTML5Player({
     frameNumber,
     fps,
     isForensicHold,
+    isSyncingLive,
+    resyncNonce,
     cues,
     activeCue,
     stepFrames,
@@ -180,14 +182,36 @@ export default function HTML5Player({
     creditTimer.current = setTimeout(() => setHoverCredit(false), 3500);
   }, [bumpControls]);
 
-  // First click anywhere on the player surface -> unlock Web Audio DSP & unmute
+  // First click on the video surface unlocks audio; subsequent clicks toggle Play / Pause
   const handlePlayerClick = useCallback(() => {
-    unmute();
-  }, [unmute]);
+    bumpControls();
+    if (playerState.isMuted) {
+      unmute();
+    } else {
+      togglePlay();
+    }
+  }, [bumpControls, playerState.isMuted, unmute, togglePlay]);
+
+  const handleProgressBarClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (!rect.width) return;
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const dur =
+        playerState.duration > 0
+          ? playerState.duration
+          : playerState.current?.durationSec || 75;
+      seekToSeconds(pct * dur, playerState.status === "paused");
+    },
+    [playerState.duration, playerState.current?.durationSec, playerState.status, seekToSeconds]
+  );
 
   const isLoading =
     playerState.status === "idle" || playerState.status === "loading";
   const isError = playerState.status === "error";
+  const isPausedOrHold = isForensicHold || playerState.status === "paused";
+  const controlsVisible = showControls || isPausedOrHold;
   const progress = Math.min(100, Math.max(0, playerState.progress * 100)).toFixed(2);
 
   return (
@@ -248,6 +272,7 @@ export default function HTML5Player({
           initialOffsetSec={getSyncedOffsetSec ? getSyncedOffsetSec() : 0}
           isMuted={playerState.isMuted}
           modalOpen={modalOpen}
+          resyncNonce={resyncNonce}
         />
       )}
 
@@ -320,10 +345,10 @@ export default function HTML5Player({
       {/* ── Top-Right Live X-Ray Region & Forensic Loupe Trigger Pill (Hover or Hold only so first load is unobstructed) ── */}
       {playerState.current && !forensicOpen && (
         <div
-          className="absolute top-2.5 right-2.5 z-40 flex items-center gap-1.5 transition-opacity duration-200"
+          className="absolute top-2.5 right-2.5 z-[45] flex items-center gap-1.5 transition-opacity duration-200"
           style={{
-            opacity: showControls || isForensicHold ? 1 : 0,
-            pointerEvents: showControls || isForensicHold ? "auto" : "none",
+            opacity: controlsVisible || isSyncingLive ? 1 : 0,
+            pointerEvents: controlsVisible || isSyncingLive ? "auto" : "none",
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -336,18 +361,29 @@ export default function HTML5Player({
               {activeCue.location.regionName} • {activeCue.vehicle.name.split(" (")[0]}
             </span>
           )}
-          {isForensicHold && (
+          {isPausedOrHold ? (
             <button
               type="button"
-              onClick={resumeRoomSync}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider cursor-pointer transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                resumeRoomSync();
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white border border-emerald-300/60 px-2.5 py-0.5 text-[10px] font-mono font-extrabold uppercase tracking-wider cursor-pointer transition-all shadow-md"
+              title="Instantly jump forward and re-lock to the live synchronized broadcast"
             >
               ⚡ LIVE RESYNC
             </button>
-          )}
+          ) : isSyncingLive ? (
+            <span className="bg-emerald-600 text-white px-2 py-0.5 text-[10px] font-mono font-extrabold uppercase tracking-wider shadow">
+              ✓ LIVE LOCKED
+            </span>
+          ) : null}
           <button
             type="button"
-            onClick={() => setForensicOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setForensicOpen(true);
+            }}
             className="bg-[#e04040] hover:bg-black text-white border border-black px-2.5 py-0.5 text-[10px] font-mono font-extrabold uppercase tracking-wider cursor-pointer transition-colors shadow"
             title="Open Frame-Accurate Forensic Loupe (800% Zoom, -1f/+1f Stepper & Storyboard Export)"
           >
@@ -359,36 +395,43 @@ export default function HTML5Player({
       {/* ── Creator credit (bottom-left, auto-fades) ─────────────────────── */}
       <CreatorCredit item={playerState.current} visible={creditVisible} />
 
-      {/* ── Controls overlay — hover only, single layer, z:40 ───────────── */}
+      {/* ── Bottom Controls Bar — anchored strictly to bottom-0 so it never blocks top buttons or video canvas ── */}
       <div
-        className="absolute inset-0 z-40 flex flex-col justify-end"
+        className="absolute inset-x-0 bottom-0 z-40 flex flex-col justify-end"
         style={{
-          opacity: showControls ? 1 : 0,
-          pointerEvents: showControls ? "auto" : "none",
+          opacity: controlsVisible ? 1 : 0,
+          pointerEvents: controlsVisible ? "auto" : "none",
           transition: "opacity 180ms ease",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="absolute inset-0 pointer-events-none"
+          className="absolute inset-x-0 -top-12 bottom-0 pointer-events-none"
           style={{
             background:
-              "linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 50%)",
+              "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 55%, transparent 100%)",
           }}
         />
 
-        {/* progress bar */}
-        <div className="relative w-full h-[3px] bg-white/15">
-          <div
-            className="h-full bg-[#e04040]"
-            style={{ width: `${progress}%`, transition: "width 250ms linear" }}
-          />
+        {/* interactive scrub progress bar */}
+        <div
+          onClick={handleProgressBarClick}
+          className="relative w-full h-3 flex items-end cursor-pointer group"
+          title="Click anywhere on timeline to scrub"
+        >
+          <div className="w-full h-[3px] group-hover:h-[5px] bg-white/20 transition-all">
+            <div
+              className="h-full bg-[#e04040]"
+              style={{ width: `${progress}%`, transition: "width 160ms linear" }}
+            />
+          </div>
         </div>
 
         {/* control row */}
-        <div className="relative flex items-center gap-2.5 px-3 py-2">
+        <div className="relative flex items-center gap-2 px-3 py-2">
           {/* play / pause */}
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               togglePlay();
@@ -398,10 +441,10 @@ export default function HTML5Player({
               border: "none",
               cursor: "pointer",
               padding: "2px",
-              color: "rgba(255,255,255,0.9)",
+              color: "rgba(255,255,255,0.95)",
             }}
             className="hover:text-[#e04040] transition-colors"
-            title="Play / Pause"
+            title={playerState.status === "playing" ? "Pause Broadcast" : "Resume Playback"}
           >
             {playerState.status === "playing" ? <PauseIcon /> : <PlayIcon />}
           </button>
@@ -434,6 +477,7 @@ export default function HTML5Player({
 
           {/* mute */}
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               toggleMute();
@@ -443,9 +487,10 @@ export default function HTML5Player({
               border: "none",
               cursor: "pointer",
               padding: "2px",
-              color: "rgba(255,255,255,0.9)",
+              color: "rgba(255,255,255,0.95)",
             }}
             className="hover:text-[#e04040] transition-colors"
+            title={playerState.isMuted ? "Unmute Audio" : "Mute Audio"}
           >
             {playerState.isMuted ? <MuteIcon /> : <VolumeIcon />}
           </button>
@@ -461,7 +506,39 @@ export default function HTML5Player({
             onClick={(e) => e.stopPropagation()}
             className="w-14 cursor-pointer accent-[#e04040]"
             style={{ height: 3 }}
+            title="Master Broadcast Volume"
           />
+
+          {/* Live Sync / Live Status Action Pill directly in bottom bar */}
+          {isPausedOrHold ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                resumeRoomSync();
+              }}
+              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-mono text-[10px] font-extrabold uppercase tracking-wider cursor-pointer transition-all shadow"
+              title="Catch up immediately to the live synchronized broadcast"
+            >
+              ⚡ LIVE SYNC
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                resumeRoomSync();
+              }}
+              className={`px-1.5 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-wider cursor-pointer transition-colors ${
+                isSyncingLive
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white/10 hover:bg-emerald-600/80 text-emerald-300 hover:text-white"
+              }`}
+              title="Synchronized with live broadcast clock (click to re-verify sync)"
+            >
+              {isSyncingLive ? "✓ SYNCED" : "● LIVE"}
+            </button>
+          )}
 
           {/* Live Timecode & Frame Counter */}
           <span className="hidden md:inline-block font-mono text-[10px] text-white/75 tracking-tight">
@@ -478,14 +555,15 @@ export default function HTML5Player({
               setForensicOpen(true);
             }}
             className="px-2 py-0.5 bg-white/15 hover:bg-[#e04040] text-white font-mono text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+            title="Open 800% Forensic Loupe & 6-Frame Contact Sheet Exporter"
           >
-            🔬 8× LOUPE & STORYBOARD
+            🔬 8× LOUPE
           </button>
 
           {/* platform badge */}
           {playerState.current && (
             <span
-              className="font-[family-name:var(--font-chat)]"
+              className="hidden sm:inline font-[family-name:var(--font-chat)]"
               style={{
                 fontSize: "clamp(6px,0.55vw,8px)",
                 color: "rgba(255,255,255,0.45)",

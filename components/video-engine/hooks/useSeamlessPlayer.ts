@@ -262,6 +262,9 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   // Forensic / manual seek hold: when true, room-clock drift correction yields to user inspection
   const forensicHoldRef = useRef(false);
   const [isForensicHold, setIsForensicHold] = useState(false);
+  const [resyncNonce, setResyncNonce] = useState(0);
+  const [isSyncingLive, setIsSyncingLive] = useState(false);
+  const syncFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const [fps, setFps] = useState(30);
   const [frameNumber, setFrameNumber] = useState(0);
@@ -320,32 +323,61 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
   const errorCount = useRef(0);
 
+  // ── Synchronize active X-Ray metadata cue at a given timestamp ──────────────
+  const syncCueAtTime = useCallback(
+    (timeSec: number, cueList: XRayMetadataCue[] = cuesRef.current) => {
+      if (!cueList || cueList.length === 0) return;
+      const matched =
+        cueList.find((c) => timeSec >= c.startTime && timeSec < c.endTime) ??
+        cueList[cueList.length - 1] ??
+        null;
+      if (matched && matched.id !== activeCueIdRef.current) {
+        activeCueIdRef.current = matched.id;
+        setActiveCue(matched);
+        onCueChange?.(matched, cueList);
+      }
+    },
+    [onCueChange]
+  );
+
   // ── Align playback position to authoritative room clock (<50ms drift target) ──
   const alignElementToRoomClock = useCallback(
     (el: HTMLVideoElement, forceHardSeek = false) => {
       if (!forceHardSeek && forensicHoldRef.current) return;
       if (!getSyncedOffsetSec) return;
       const dur = el.duration;
-      if (!dur || Number.isNaN(dur) || !Number.isFinite(dur) || dur <= 1) return;
+      if (!dur || Number.isNaN(dur) || !Number.isFinite(dur) || dur <= 0.5) return;
 
       const rawTarget = getSyncedOffsetSec();
       // Wrap cleanly modulo duration if room default slot (75s) exceeds a shorter clip
       const effectiveTarget =
-        rawTarget < dur - 0.35 ? rawTarget : rawTarget % Math.max(1, dur - 0.25);
+        rawTarget < dur - 0.2 ? rawTarget : rawTarget % Math.max(0.5, dur - 0.2);
 
-      const drift = el.currentTime - effectiveTarget;
+      const safeTarget = Math.max(0, Math.min(effectiveTarget, Math.max(0, dur - 0.15)));
+      const drift = el.currentTime - safeTarget;
       const absDrift = Math.abs(drift);
 
-      if (forceHardSeek || absDrift > 1.2) {
-        try {
-          const safeTarget = Math.max(0, Math.min(effectiveTarget, Math.max(0, dur - 3)));
-          if (Math.abs(el.currentTime - safeTarget) > 1.0) {
+      if (forceHardSeek || absDrift > 1.15) {
+        if (absDrift > (forceHardSeek ? 0.06 : 0.85)) {
+          try {
             el.currentTime = safeTarget;
+          } catch {
+            // Ignore seek before buffer ready
           }
-        } catch {
-          // Ignore seek before buffer ready
         }
         if (el.playbackRate !== 1.0) el.playbackRate = 1.0;
+
+        if (forceHardSeek) {
+          const effectiveFps = fps || 30;
+          setCurrentTimeSec(safeTarget);
+          setFrameNumber(Math.max(0, Math.round(safeTarget * effectiveFps)));
+          syncCueAtTime(safeTarget);
+          setPlayerState((s) => ({
+            ...s,
+            progress: dur > 0 ? safeTarget / dur : s.progress,
+            duration: dur,
+          }));
+        }
       } else if (absDrift > 0.05) {
         // Gentle ±3% pitch-safe rate nudge converges drift below <50ms smoothly
         const desiredRate = drift > 0 ? 0.97 : 1.03;
@@ -356,7 +388,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         el.playbackRate = 1.0;
       }
     },
-    [getSyncedOffsetSec]
+    [getSyncedOffsetSec, fps, syncCueAtTime]
   );
 
   const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -408,9 +440,27 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     const preEl = slotEl(inactiveSlot) as VideoWithMeta | null;
     const audioGraph = getDriveInAudioGraph();
 
-    // Case 1: Already playing this exact clip in the active slot (e.g. metadata refresh)
+    // If user intentionally paused or scrubbed (forensic hold) on an active clip,
+    // do NOT yank their paused video away mid-inspection — silently pre-buffer the live clip
+    // into the inactive slot so clicking "LIVE SYNC" swaps to it in <16ms!
+    if (forensicHoldRef.current && curEl && curEl._itemId) {
+      if (curEl._itemId !== syncedCurrent.id && preEl && preEl._itemId !== syncedCurrent.id) {
+        void attachSource(preEl, streamUrl, syncedCurrent.id, true).then(() => {
+          if (!cancelled && !preEl._hls) {
+            preEl.preload = "auto";
+            preEl.load();
+          }
+        });
+      }
+      return;
+    }
+
+    // Case 1: Already playing this exact clip in the active slot (e.g. metadata refresh or releasing forensic hold)
     if (curEl && curEl._itemId === syncedCurrent.id) {
       alignElementToRoomClock(curEl, false);
+      if (curEl.paused && !forensicHoldRef.current) {
+        curEl.play().catch(() => {});
+      }
       setPlayerState((s) => ({
         ...s,
         status: "playing",
@@ -516,7 +566,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoomControlled, syncedCurrent?.id]);
+  }, [isRoomControlled, syncedCurrent?.id, isForensicHold]);
 
   // Re-align immediately if clipStartTimestamp shifts (e.g. Crowd High-Beam +15s Encore Surge!)
   useEffect(() => {
@@ -657,22 +707,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     swapRef.current = swap;
   }, [swap]);
 
-  // ── Synchronize active X-Ray metadata cue at a given timestamp ──────────────
-  const syncCueAtTime = useCallback(
-    (timeSec: number, cueList: XRayMetadataCue[] = cuesRef.current) => {
-      if (!cueList || cueList.length === 0) return;
-      const matched =
-        cueList.find((c) => timeSec >= c.startTime && timeSec < c.endTime) ??
-        cueList[cueList.length - 1] ??
-        null;
-      if (matched && matched.id !== activeCueIdRef.current) {
-        activeCueIdRef.current = matched.id;
-        setActiveCue(matched);
-        onCueChange?.(matched, cueList);
-      }
-    },
-    [onCueChange]
-  );
+  const lastCueClipIdRef = useRef<string | null>(null);
 
   // ── Attach HTMLTrackElement (kind="metadata") & VTTCues when clip loads ─────
   useEffect(() => {
@@ -680,14 +715,18 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     if (!item) {
       cuesRef.current = [];
       activeCueIdRef.current = null;
+      lastCueClipIdRef.current = null;
       setCues([]);
       setActiveCue(null);
       return;
     }
 
-    // Reset forensic hold on new clip transition
-    forensicHoldRef.current = false;
-    setIsForensicHold(false);
+    // Reset forensic hold only when the active displayed clip actually changes
+    if (lastCueClipIdRef.current !== item.id) {
+      lastCueClipIdRef.current = item.id;
+      forensicHoldRef.current = false;
+      setIsForensicHold(false);
+    }
 
     const generated = generateXRayCuesForVideo(
       item,
@@ -872,6 +911,10 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       onEnded: () => {
         clearWatchdog();
         if (activeSlot.current !== slot) return;
+        if (forensicHoldRef.current) {
+          setPlayerState((s) => ({ ...s, status: "paused", progress: 1 }));
+          return;
+        }
         const el = slotEl(slot);
         if (isRoomControlled && el) {
           // If clip finishes slightly before room alarm/clock boundary, loop seamlessly at synced offset
@@ -989,6 +1032,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     const slotB = playerBRef.current;
     return () => {
       clearWatchdog();
+      if (syncFlashTimerRef.current) clearTimeout(syncFlashTimerRef.current);
       destroyHls(slotA);
       destroyHls(slotB);
     };
@@ -996,46 +1040,54 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
   // ── Audio & Playback Controls ──────────────────────────────────────────────
   const unmute = useCallback(() => {
+    const audioGraph = getDriveInAudioGraph();
+    audioGraph.unlock(playerARef.current, playerBRef.current);
+    audioGraph.setActiveSlot(activeSlot.current);
+
     if (!mutedRef.current) return;
     mutedRef.current = false;
 
     const el = activeEl();
-    if (el) {
-      el.muted = false;
-      el.volume = volumeRef.current;
-      if (el.paused) {
-        el.play().catch(() => {});
-      }
+    applyVolumeToActiveElement(el);
+    if (el && el.paused && !forensicHoldRef.current) {
+      el.play().catch(() => {});
     }
 
     setPlayerState((s) => ({ ...s, isMuted: false }));
-  }, [activeEl]);
+  }, [activeEl, applyVolumeToActiveElement]);
 
   const toggleMute = useCallback(() => {
     const newMuted = !mutedRef.current;
     mutedRef.current = newMuted;
 
-    const el = activeEl();
-    if (el) {
-      el.muted = newMuted;
-      el.volume = volumeRef.current;
+    const audioGraph = getDriveInAudioGraph();
+    if (!newMuted) {
+      audioGraph.unlock(playerARef.current, playerBRef.current);
+      audioGraph.setActiveSlot(activeSlot.current);
     }
+
+    const el = activeEl();
+    applyVolumeToActiveElement(el);
     setPlayerState((s) => ({ ...s, isMuted: newMuted }));
-  }, [activeEl]);
+  }, [activeEl, applyVolumeToActiveElement]);
 
   const setVolume = useCallback(
     (vol: number) => {
-      volumeRef.current = vol;
-      mutedRef.current = vol === 0;
+      const clamped = Math.max(0, Math.min(1, vol));
+      volumeRef.current = clamped;
+      mutedRef.current = clamped === 0;
+
+      const audioGraph = getDriveInAudioGraph();
+      if (clamped > 0) {
+        audioGraph.unlock(playerARef.current, playerBRef.current);
+        audioGraph.setActiveSlot(activeSlot.current);
+      }
 
       const el = activeEl();
-      if (el) {
-        el.volume = vol;
-        el.muted = vol === 0;
-      }
-      setPlayerState((s) => ({ ...s, volume: vol, isMuted: vol === 0 }));
+      applyVolumeToActiveElement(el);
+      setPlayerState((s) => ({ ...s, volume: clamped, isMuted: clamped === 0 }));
     },
-    [activeEl]
+    [activeEl, applyVolumeToActiveElement]
   );
 
   const skipToNext = useCallback(() => {
@@ -1149,19 +1201,65 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     [activeEl, fps, isEmbedFallback, playerState.duration, syncCueAtTime]
   );
 
-  // ── Re-lock to authoritative communal room clock after forensic inspection ──
+  // ── Re-lock to authoritative communal room clock after pause / forensic inspection ──
   const resumeRoomSync = useCallback(() => {
     forensicHoldRef.current = false;
     setIsForensicHold(false);
-    const el = activeEl();
+    setResyncNonce((n) => n + 1);
+
+    setIsSyncingLive(true);
+    if (syncFlashTimerRef.current) clearTimeout(syncFlashTimerRef.current);
+    syncFlashTimerRef.current = setTimeout(() => setIsSyncingLive(false), 750);
+
+    const el = activeEl() as VideoWithMeta | null;
+
     if (el && !isEmbedFallback) {
-      if (isRoomControlled) {
-        alignElementToRoomClock(el, true);
+      const sameLiveClip =
+        !isRoomControlled || !syncedCurrent || el._itemId === syncedCurrent.id;
+
+      if (sameLiveClip) {
+        if (isRoomControlled) {
+          alignElementToRoomClock(el, true);
+        }
+        el.play().catch(() => {});
+        setPlayerState((s) => ({ ...s, status: "playing" }));
       }
-      el.play().catch(() => {});
-      setPlayerState((s) => ({ ...s, status: "playing" }));
+      // Note: if syncedCurrent.id already advanced while paused, flipping isForensicHold=false
+      // triggers the Room-Controlled Sync Effect on this render for an instant <16ms prebuffer swap!
     }
-  }, [activeEl, isEmbedFallback, isRoomControlled, alignElementToRoomClock]);
+
+    // Re-verify authoritative server clock & active clip in parallel (handles boundary rollovers seamlessly)
+    if (isRoomControlled && onRefreshSync) {
+      void onRefreshSync().then(() => {
+        if (forensicHoldRef.current) return;
+        const latestEl = activeEl() as VideoWithMeta | null;
+        if (latestEl && !isEmbedFallback) {
+          if (!syncedCurrent || latestEl._itemId === syncedCurrent.id) {
+            alignElementToRoomClock(latestEl, true);
+            if (latestEl.paused) {
+              latestEl.play().catch(() => {});
+            }
+            setPlayerState((s) => ({ ...s, status: "playing" }));
+          }
+        }
+      });
+    }
+  }, [
+    activeEl,
+    isEmbedFallback,
+    isRoomControlled,
+    syncedCurrent,
+    alignElementToRoomClock,
+    onRefreshSync,
+  ]);
+
+  // Allow any newspaper button (Header Ribbon, X-Ray Deck, Mini-Deck) to trigger instant Live Sync
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onLiveResync = () => resumeRoomSync();
+    window.addEventListener("lv:resume-live-sync", onLiveResync);
+    return () => window.removeEventListener("lv:resume-live-sync", onLiveResync);
+  }, [resumeRoomSync]);
 
   // ── Global Bi-Directional Event Bus Listener (lv:seek-video) ───────────────
   useEffect(() => {
@@ -1242,6 +1340,8 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     frameNumber,
     fps,
     isForensicHold,
+    isSyncingLive,
+    resyncNonce,
     cues,
     activeCue,
     stepFrames,

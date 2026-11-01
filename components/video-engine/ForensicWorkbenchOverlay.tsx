@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { VideoItem } from "@/lib/video/types";
 import {
   formatPreciseTimecode,
@@ -130,9 +131,16 @@ export default function ForensicWorkbenchOverlay({
     ctx.translate(-centerX, -centerY);
 
     let drewVideo = false;
-    if (videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+    if (videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
       try {
-        ctx.drawImage(videoEl, 0, 0, W, H);
+        const vw = videoEl.videoWidth;
+        const vh = videoEl.videoHeight;
+        const scale = Math.min(W / vw, H / vh);
+        const dw = vw * scale;
+        const dh = vh * scale;
+        const dx = (W - dw) / 2;
+        const dy = (H - dh) / 2;
+        ctx.drawImage(videoEl, dx, dy, dw, dh);
         drewVideo = true;
       } catch {
         drewVideo = false;
@@ -649,9 +657,18 @@ export default function ForensicWorkbenchOverlay({
     }
   };
 
-  return (
+  const activeVideoEl = getVideoElement();
+  const isInsidePiPWindow =
+    typeof document !== "undefined" &&
+    Boolean(activeVideoEl && activeVideoEl.ownerDocument !== document);
+
+  const workbenchContent = (
     <div
-      className="absolute inset-0 z-50 bg-black/95 text-white flex flex-col justify-between select-none overflow-hidden"
+      className={
+        isInsidePiPWindow
+          ? "absolute inset-0 z-50 bg-black/95 text-white flex flex-col justify-between select-none overflow-hidden"
+          : "relative w-full max-w-6xl h-[88vh] max-h-[820px] bg-black/95 text-white border-2 border-[#e04040] shadow-[8px_8px_0_#000] flex flex-col justify-between select-none overflow-hidden"
+      }
       onClick={(e) => e.stopPropagation()}
     >
       {/* ── TOP FORENSIC COMMAND RIBBON ───────────────────────────────────── */}
@@ -669,7 +686,10 @@ export default function ForensicWorkbenchOverlay({
           {isForensicHold && (
             <button
               type="button"
-              onClick={onResumeRoomSync}
+              onClick={() => {
+                onResumeRoomSync();
+                showToast("⚡ Re-locked to live synchronized broadcast!");
+              }}
               className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 cursor-pointer transition-colors"
               title="Re-lock player to live communal room clock"
             >
@@ -901,4 +921,18 @@ export default function ForensicWorkbenchOverlay({
       )}
     </div>
   );
+
+  if (!isInsidePiPWindow && typeof document !== "undefined") {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[95] bg-black/85 backdrop-blur-[2px] p-2 sm:p-5 lg:p-8 flex items-center justify-center"
+        onClick={onClose}
+      >
+        {workbenchContent}
+      </div>,
+      document.body
+    );
+  }
+
+  return workbenchContent;
 }
