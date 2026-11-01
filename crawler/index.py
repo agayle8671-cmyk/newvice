@@ -13,11 +13,20 @@ from urllib.parse import urlparse
 from datetime import datetime, timezone
 import requests
 
-from .common import (
-    extract,
-    SB_HEADERS,
-    SUPABASE_URL,
-)
+try:
+    from .common import (
+        extract,
+        SB_HEADERS,
+        SUPABASE_URL,
+    )
+    from .run_all import run
+except (ImportError, ValueError):
+    from common import (
+        extract,
+        SB_HEADERS,
+        SUPABASE_URL,
+    )
+    from run_all import run
 
 log = logging.getLogger("crawler.service")
 
@@ -86,7 +95,6 @@ class handler(BaseHTTPRequestHandler):
 
         elif parsed.path in ("/crawl", "/api/crawl"):
             platforms = payload.get("platforms", ["archive", "peertube"])
-            from .run_all import run
             try:
                 run(platforms=platforms)
                 self._send_json(200, {"ok": True, "message": f"Crawled platforms: {platforms}"})

@@ -15,7 +15,8 @@
     },
     "crawler": {
       "root": "crawler",
-      "runtime": "python"
+      "runtime": "python",
+      "entrypoint": "index.py"
     }
   },
   "crons": [
