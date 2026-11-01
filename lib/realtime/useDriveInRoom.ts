@@ -116,6 +116,7 @@ export function useDriveInRoom({
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncFnRef = useRef<() => Promise<void>>(async () => {});
   const mountedRef = useRef(true);
+  const reportedDurationsRef = useRef<Map<string, number>>(new Map());
 
   // Keep callback refs fresh without forcing WebSocket reconnects
   const callbacksRef = useRef({
@@ -201,10 +202,14 @@ export function useDriveInRoom({
         }
 
         // Schedule exact boundary transition for the deterministic cycle
+        const realDurationSec =
+          reportedDurationsRef.current.get(data.current.id) ||
+          data.current.durationSec ||
+          DEFAULT_CLIP_DURATION_SEC;
         const durMs =
           Math.max(
             12,
-            Math.min(data.current.durationSec || DEFAULT_CLIP_DURATION_SEC, 300)
+            Math.min(realDurationSec, 300)
           ) * 1000;
         const offsetMs = Math.max(
           0,
@@ -545,6 +550,9 @@ export function useDriveInRoom({
   }, []);
 
   const reportClipDuration = useCallback((videoId: string, durationSec: number) => {
+    if (Number.isFinite(durationSec) && durationSec >= 5) {
+      reportedDurationsRef.current.set(videoId, Math.round(durationSec));
+    }
     const ws = socketRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       const pkt: ClientToServerMessage = {

@@ -349,7 +349,15 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       if (!dur || Number.isNaN(dur) || !Number.isFinite(dur) || dur <= 0.5) return;
 
       const rawTarget = getSyncedOffsetSec();
-      // Wrap cleanly modulo duration if room default slot (75s) exceeds a shorter clip
+      // If room clock has progressed past this clip's duration, trigger seamless advance instead of looping
+      if (rawTarget >= dur - 0.5 && !forensicHoldRef.current && (syncedNext || playerState.next)) {
+        if (!swapping.current) {
+          void swapRef.current();
+        }
+        return;
+      }
+
+      // Wrap cleanly modulo duration if room default slot (75s) exceeds a shorter clip without next candidate
       const effectiveTarget =
         rawTarget < dur - 0.2 ? rawTarget : rawTarget % Math.max(0.5, dur - 0.2);
 
@@ -388,7 +396,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
         el.playbackRate = 1.0;
       }
     },
-    [getSyncedOffsetSec, fps, syncCueAtTime]
+    [getSyncedOffsetSec, fps, syncCueAtTime, syncedNext, playerState.next]
   );
 
   const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -406,14 +414,11 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       const el = activeEl();
       if (el && (el.readyState < 2 || el.currentTime === 0) && !el.paused) {
         console.warn("[useSeamlessPlayer] Watchdog timeout (>7s with no progress), auto-recovering...");
-        if (isRoomControlled) {
-          onRefreshSync?.();
-        } else {
-          void swapRef.current();
-        }
+        void swapRef.current();
+        onRefreshSync?.();
       }
     }, 7000);
-  }, [clearWatchdog, activeEl, isRoomControlled, onRefreshSync]);
+  }, [clearWatchdog, activeEl, onRefreshSync]);
 
   // ── Room-Controlled Sync Effect: Instant <16ms Pre-Buffer Swap or Direct Load ──
   useEffect(() => {
@@ -483,7 +488,13 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
       applyVolumeToActiveElement(preEl);
       alignElementToRoomClock(preEl, true);
-      preEl.play().catch(() => {});
+      preEl.play().catch(() => {
+        // Autoplay policy fallback: if unmuted play rejected, mute and replay
+        preEl.muted = true;
+        mutedRef.current = true;
+        setPlayerState((s) => ({ ...s, isMuted: true, status: "playing" }));
+        preEl.play().catch(() => {});
+      });
 
       setPlayerState((s) => ({
         ...s,
@@ -605,12 +616,9 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     };
   }, [isRoomControlled, syncedNext, prebufferEl, playerState.current?.id]);
 
-  // ── Standalone Autonomous Swap (used when not connected to room coordinator) ──
+  // ── Dual-DOM <16ms Swap (Seamless communal broadcast & standalone queue) ──
   const swap = useCallback(async () => {
-    if (isRoomControlled) {
-      if (onRefreshSync) await onRefreshSync();
-      return;
-    }
+    if (forensicHoldRef.current) return;
 
     if (swapping.current) {
       swapQueued.current = true;
@@ -624,6 +632,61 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     const newEl = slotEl(newSlot) as VideoWithMeta | null;
     const oldEl = slotEl(activeSlot.current) as VideoWithMeta | null;
     const audioGraph = getDriveInAudioGraph();
+
+    if (isRoomControlled) {
+      const incomingCandidate = syncedNext || playerState.next;
+
+      if (incomingCandidate && newEl) {
+        if (newEl._itemId !== incomingCandidate.id) {
+          const streamUrl = incomingCandidate.manifestUrl ?? incomingCandidate.directMp4Url;
+          if (streamUrl) {
+            await attachSource(newEl, streamUrl, incomingCandidate.id, mutedRef.current);
+          }
+        }
+
+        activeSlot.current = newSlot;
+        setOpacity(newSlot === "A" ? { A: 1, B: 0 } : { A: 0, B: 1 });
+        audioGraph.setActiveSlot(newSlot);
+
+        if (oldEl) {
+          oldEl.pause();
+          oldEl.muted = true;
+        }
+
+        applyVolumeToActiveElement(newEl);
+        alignElementToRoomClock(newEl, true);
+
+        newEl.play().catch(() => {
+          newEl.muted = true;
+          mutedRef.current = true;
+          setPlayerState((s) => ({ ...s, isMuted: true, status: "playing" }));
+          newEl.play().catch(() => {});
+        });
+
+        armWatchdog();
+
+        setPlayerState((s) => ({
+          ...s,
+          status: "playing",
+          current: incomingCandidate,
+          next: null,
+          progress: 0,
+          duration: Number.isFinite(newEl.duration) ? newEl.duration : 0,
+        }));
+
+        swapping.current = false;
+        if (onRefreshSync) {
+          void onRefreshSync();
+        }
+        return;
+      }
+
+      swapping.current = false;
+      if (onRefreshSync) {
+        await onRefreshSync();
+      }
+      return;
+    }
 
     let incomingItem = playerState.next;
 
@@ -655,6 +718,7 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
       newEl.play().catch(() => {
         newEl.muted = true;
         mutedRef.current = true;
+        setPlayerState((s) => ({ ...s, isMuted: true, status: "playing" }));
         newEl.play().catch(() => {});
       });
       armWatchdog();
@@ -695,11 +759,13 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
   }, [
     isRoomControlled,
     onRefreshSync,
+    syncedNext,
     playerState.next,
     fetchNext,
     prebufferEl,
     slotEl,
     applyVolumeToActiveElement,
+    alignElementToRoomClock,
     armWatchdog,
   ]);
 
@@ -890,10 +956,29 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
 
     if (isRoomControlled) {
       alignElementToRoomClock(el, false);
+      if (
+        remaining <= 0.8 &&
+        !swapping.current &&
+        !forensicHoldRef.current &&
+        (syncedNext || playerState.next)
+      ) {
+        void swap();
+      }
     } else if (remaining <= HANDOFF_THRESHOLD_SEC && !swapping.current && !forensicHoldRef.current) {
       swap();
     }
-  }, [activeEl, clearWatchdog, isRoomControlled, alignElementToRoomClock, onReportDuration, swap, fps, syncCueAtTime]);
+  }, [
+    activeEl,
+    clearWatchdog,
+    isRoomControlled,
+    alignElementToRoomClock,
+    onReportDuration,
+    swap,
+    fps,
+    syncCueAtTime,
+    syncedNext,
+    playerState.next,
+  ]);
 
   // ── Resilient Slot Handlers (Proxy -> Next Proxy -> Direct Raw Fallback) ──
   const makeSlotHandlers = useCallback(
@@ -915,15 +1000,9 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
           setPlayerState((s) => ({ ...s, status: "paused", progress: 1 }));
           return;
         }
-        const el = slotEl(slot);
-        if (isRoomControlled && el) {
-          // If clip finishes slightly before room alarm/clock boundary, loop seamlessly at synced offset
-          alignElementToRoomClock(el, true);
-          el.play().catch(() => {});
-          onRefreshSync?.();
-          return;
+        if (!swapping.current) {
+          void swap();
         }
-        if (!swapping.current) swap();
       },
       onError: () => {
         clearWatchdog();
