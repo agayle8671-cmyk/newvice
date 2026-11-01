@@ -53,23 +53,7 @@ const HORN_MIN_INTERVAL_MS = 1500;                 // Horns are loud — rate-li
 const ROW_CAPACITIES: Record<LotRow, number> = { A: 6, B: 8, C: 10 };
 const ROW_DEPTH: Record<LotRow, number> = { A: 0.22, B: 0.52, C: 0.82 };
 
-const FALLBACK_PLAYLIST: VideoItem[] = [
-  {
-    id: "fallback-mux-001",
-    source: "direct",
-    manifestUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-    title: "GTA VI — Leonida Vice Broadcast Feed",
-    creatorName: "LeonidaVice",
-    creatorUrl: "https://leonidavice.com",
-    platform: "direct",
-    platformIcon: "📡",
-    sourceUrl: "https://leonidavice.com",
-    durationSec: 120,
-    category: "gameplay",
-    fetchedAt: new Date().toISOString(),
-    playCount: 0,
-  },
-];
+const FALLBACK_PLAYLIST: VideoItem[] = [];
 
 export class DriveInRoomServer extends Server<Env> {
   // Enable Cloudflare WebSocket Hibernation API — idle rooms consume 0 compute!

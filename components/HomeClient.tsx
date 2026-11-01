@@ -156,15 +156,6 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
       .slice(-150);
   }, [messages, room.recentChat]);
 
-  // If the room coordinator can't be reached at all, fall back to the standalone queue
-  // after a grace period instead of leaving the screen on "TUNING IN" forever.
-  const [syncGaveUp, setSyncGaveUp] = useState(false);
-  useEffect(() => {
-    if (room.isSynced) return;
-    const t = setTimeout(() => setSyncGaveUp(true), 9000);
-    return () => clearTimeout(t);
-  }, [room.isSynced]);
-
   const sendSyncedChat = room.sendSyncedChat;
   const displayedPresenceCount =
     room.syncMode === "partyserver" && room.vehicles.length > 0
@@ -485,13 +476,6 @@ export default function HomeClient({ roomSlug = "main-theater" }: HomeClientProp
               <VideoEngine
                 onItemChange={setCurrentVideoItem}
                 modalOpen={anyModalOpen}
-                syncMode={room.syncMode}
-                syncedCurrent={room.isSynced ? room.current : syncGaveUp ? undefined : null}
-                syncedNext={room.isSynced ? room.next : syncGaveUp ? undefined : null}
-                clipStartTimestamp={room.clipStartTimestamp}
-                getSyncedOffsetSec={room.getSyncedOffsetSec}
-                onReportDuration={room.reportClipDuration}
-                onRefreshSync={room.refreshSync}
               />
               {/* CRT scanline overlay */}
               <div

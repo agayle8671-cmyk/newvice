@@ -52,7 +52,6 @@ export interface HTML5PlayerProps extends UseSeamlessPlayerOptions {
 export default function HTML5Player({
   onItemChange,
   modalOpen = false,
-  syncMode,
   syncedCurrent,
   syncedNext,
   clipStartTimestamp,
@@ -154,7 +153,6 @@ export default function HTML5Player({
       {/* ── Persistent DOM Slot A (<16ms single-frame z-index swap) ──────── */}
       <video
         ref={playerARef}
-        crossOrigin="anonymous"
         className="absolute inset-0 w-full h-full object-cover"
         style={{
           opacity: isEmbedFallback ? 0 : 1,
@@ -174,7 +172,6 @@ export default function HTML5Player({
       {/* ── Persistent DOM Slot B (<16ms single-frame z-index swap) ──────── */}
       <video
         ref={playerBRef}
-        crossOrigin="anonymous"
         className="absolute inset-0 w-full h-full object-cover"
         style={{
           opacity: isEmbedFallback ? 0 : 1,
@@ -361,59 +358,30 @@ export default function HTML5Player({
             </span>
           )}
 
-          {/* sync status / re-sync or standalone next */}
-          {isRoomControlled ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRefreshSync?.();
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "2px",
-              }}
-              className="text-[#39ff14]/80 hover:text-[#00f3ff] transition-colors flex items-center gap-1"
-              title={
-                syncMode === "partyserver"
-                  ? "Edge Durable Object Synchronized (<50ms)"
-                  : "Global Server-Clock Synchronized"
-              }
+          {/* next clip button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              skipToNext();
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px",
+              color: "rgba(255,255,255,0.55)",
+            }}
+            className="hover:text-[#ff007f] transition-colors flex items-center gap-1"
+            title="Next clip"
+          >
+            <SkipIcon />
+            <span
+              className="font-[family-name:var(--font-display)] font-black tracking-wider uppercase"
+              style={{ fontSize: "clamp(5px,0.48vw,7px)" }}
             >
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#39ff14]" />
-              <span
-                className="font-[family-name:var(--font-display)] font-black tracking-wider uppercase"
-                style={{ fontSize: "clamp(5px,0.48vw,7px)" }}
-              >
-                {syncMode === "partyserver" ? "EDGE SYNC" : "LIVE SYNC"}
-              </span>
-            </button>
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                skipToNext();
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "2px",
-                color: "rgba(255,255,255,0.55)",
-              }}
-              className="hover:text-[#ff007f] transition-colors flex items-center gap-1"
-              title="Next clip"
-            >
-              <SkipIcon />
-              <span
-                className="font-[family-name:var(--font-display)] font-black tracking-wider uppercase"
-                style={{ fontSize: "clamp(5px,0.48vw,7px)" }}
-              >
-                NEXT
-              </span>
-            </button>
-          )}
+              NEXT
+            </span>
+          </button>
         </div>
       </div>
     </div>

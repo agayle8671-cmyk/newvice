@@ -1,6 +1,7 @@
 // ─── Shared Catalog Logic ────────────────────────────────────────────────────
 // One implementation of row→VideoItem mapping, platform icons, English-only
-// filtering, and the Launch-Day "post-launch" gate. Used by:
+// filtering, demo-stream rejection, and the Launch-Day "post-launch" gate.
+// Used by:
 //   • app/api/room/[slug]/sync/route.ts   (deterministic server-clock coordinator)
 //   • app/api/video/next/route.ts         (standalone queue)
 //   • party/src/server.ts                 (Cloudflare Durable Object coordinator)
@@ -68,6 +69,26 @@ export function platformIcon(platform: string | null | undefined): string {
   return PLATFORM_ICONS[(platform ?? "").toLowerCase()] ?? "🎬";
 }
 
+// ─── Reject any demo / test streams (e.g. Mux / Big Buck Bunny) ──────────────
+const DEMO_URL_REGEX =
+  /(test-streams\.mux\.dev|big_buck_bunny|akamaihd\.net\/i\/multi\/will\/bunny|x36xhzz\.m3u8)/i;
+
+export function isDemoOrPlaceholderRow(
+  row: Pick<
+    CatalogRow,
+    "id" | "source_platform" | "manifest_url" | "direct_mp4_url" | "canonical_url"
+  >
+): boolean {
+  const id = (row.id ?? "").toLowerCase();
+  if (id.startsWith("demo-") || id.startsWith("fallback-")) return true;
+  if ((row.source_platform ?? "").toLowerCase() === "direct") return true;
+  const urls = [row.manifest_url, row.direct_mp4_url, row.canonical_url]
+    .filter(Boolean)
+    .join(" ");
+  if (DEMO_URL_REGEX.test(urls)) return true;
+  return false;
+}
+
 // ─── English-only filter ─────────────────────────────────────────────────────
 const FOREIGN_SCRIPT_REGEX =
   /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/;
@@ -119,18 +140,20 @@ export function isObsoleteAfterLaunch(
   return false;
 }
 
-/** Applies English-only + (post-launch) obsolete-content gates to catalog rows. */
+/** Applies real-scraped-only, English-only, and (post-launch) obsolete-content gates to catalog rows. */
 export function filterCatalogRows<T extends CatalogRow>(rows: T[], env: LaunchEnv = {}): T[] {
   const postLaunch = isPostLaunch(env);
   return rows.filter((row) => {
+    if (isDemoOrPlaceholderRow(row)) return false;
     if (!isEnglishTitle(row.title)) return false;
     if (postLaunch && isObsoleteAfterLaunch(row, env)) return false;
-    return Boolean(row.direct_mp4_url || row.manifest_url || row.youtube_id);
+    // Require a playable scraped stream (HLS manifest or direct MP4)
+    return Boolean(row.direct_mp4_url || row.manifest_url);
   });
 }
 
 export function rowToVideoItem(row: CatalogRow): VideoItem {
-  const platform = row.source_platform || "direct";
+  const platform = row.source_platform || "archive";
   return {
     id: row.id,
     source: platform as VideoSource,

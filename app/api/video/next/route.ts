@@ -1,47 +1,27 @@
 import { NextResponse } from "next/server";
-import type { VideoItem, NextStreamResponse } from "@/lib/video/types";
+import type { NextStreamResponse } from "@/lib/video/types";
 import { filterCatalogRows, rowToVideoItem, type CatalogRow } from "@/lib/video/catalog";
 import { getSupabaseAdmin, getSupabaseReader } from "@/lib/supabase/admin";
 
-// ─── Demo queue ───────────────────────────────────────────────────────────────
-// Used when Supabase isn't configured or the catalog has no eligible clips.
-const DEMO_QUEUE: VideoItem[] = [
-  {
-    id: "demo-001",
-    source: "direct",
-    // Public Mux test HLS — specifically maintained for hls.js testing, CORS-open
-    manifestUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-    title: "GTA VI — Live Clip Feed (Warming Up)",
-    creatorName: "LeonidaVice",
-    creatorUrl: "https://leonidavice.com",
-    platform: "Live Feed",
-    platformIcon: "📡",
-    sourceUrl: "https://leonidavice.com",
-    durationSec: 596,
-    category: "gameplay",
-    fetchedAt: new Date(0).toISOString(),
-    playCount: 0,
-  },
-];
+// ─── Real Scraped Clip Queue (/api/video/next) ───────────────────────────────
+// Serves only real scraped clips (and approved community clips) from Supabase
+// video_catalog. Demo/placeholder streams are never returned.
 
-let demoIndex = 0;
-
-function demoResponse() {
-  const item = DEMO_QUEUE[demoIndex % DEMO_QUEUE.length];
-  demoIndex++;
-  const response: NextStreamResponse = { ok: true, item };
-  return NextResponse.json(response);
-}
-
-const CANDIDATE_BATCH = 25;
+const CANDIDATE_LIMIT = 150;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const sessionId = (searchParams.get("session") ?? "anon").slice(0, 80);
 
   const reader = getSupabaseReader();
-  if (!reader) return demoResponse();
+  if (!reader) {
+    return NextResponse.json(
+      { ok: false, item: null, error: "Supabase not configured" } satisfies NextStreamResponse,
+      { status: 503 }
+    );
+  }
   const admin = getSupabaseAdmin();
+  const dbWriter = admin ?? reader;
 
   try {
     const launchEnv = {
@@ -49,67 +29,85 @@ export async function GET(request: Request) {
       GTA6_LAUNCH_MODE: process.env.GTA6_LAUNCH_MODE,
     };
 
-    // Bounded loop (no unbounded recursion): at most one session-history reset.
-    for (let pass = 0; pass < 2; pass++) {
-      const { data: played } = await reader
-        .from("video_session_plays")
-        .select("video_id")
-        .eq("session_id", sessionId)
-        .order("played_at", { ascending: false })
-        .limit(50);
+    // 1. Fetch recently played clip IDs for this viewer session
+    const { data: played } = await reader
+      .from("video_session_plays")
+      .select("video_id")
+      .eq("session_id", sessionId)
+      .order("played_at", { ascending: false })
+      .limit(100);
 
-      const playedIds = (played ?? []).map((r: { video_id: string }) => r.video_id);
+    const playedSet = new Set(
+      (played ?? []).map((r: { video_id: string }) => r.video_id)
+    );
 
-      let query = reader
-        .from("video_catalog")
-        .select("*")
-        .eq("is_active", true)
-        .eq("is_approved", true)
-        .order("play_count", { ascending: true })
-        .limit(CANDIDATE_BATCH);
+    // 2. Fetch active, approved real scraped clips ordered by play_count ascending
+    const { data: rows, error } = await reader
+      .from("video_catalog")
+      .select("*")
+      .eq("is_active", true)
+      .eq("is_approved", true)
+      .neq("source_platform", "direct")
+      .not("id", "like", "demo-%")
+      .order("play_count", { ascending: true })
+      .limit(CANDIDATE_LIMIT);
 
-      if (playedIds.length > 0) {
-        const quoted = playedIds.map((id) => `"${id.replace(/"/g, "")}"`).join(",");
-        query = query.not("id", "in", `(${quoted})`);
-      }
+    if (error) throw error;
 
-      const { data: rows, error } = await query;
-      if (error) throw error;
+    // 3. Apply English-only + Demo rejection + Launch-Day filter
+    const eligible = filterCatalogRows((rows ?? []) as CatalogRow[], launchEnv);
 
-      // English-only + Launch-Day gate applied at read time (no destructive side effects)
-      const eligible = filterCatalogRows((rows ?? []) as CatalogRow[], launchEnv);
-      const row = eligible[0];
-
-      if (!row) {
-        // Queue exhausted for this session → reset history once and retry
-        if (pass === 0 && playedIds.length > 0 && admin) {
-          await admin.from("video_session_plays").delete().eq("session_id", sessionId);
-          continue;
-        }
-        break;
-      }
-
-      // Record play (best-effort, never blocks playback)
-      if (admin) {
-        void Promise.all([
-          admin.from("video_session_plays").upsert({
-            session_id: sessionId,
-            video_id: row.id,
-            played_at: new Date().toISOString(),
-          }),
-          admin
-            .from("video_catalog")
-            .update({ play_count: (row.play_count ?? 0) + 1, last_played: new Date().toISOString() })
-            .eq("id", row.id),
-        ]).catch(() => {});
-      }
-
-      const response: NextStreamResponse = { ok: true, item: rowToVideoItem(row) };
-      return NextResponse.json(response);
+    if (eligible.length === 0) {
+      return NextResponse.json(
+        { ok: false, item: null, error: "No eligible scraped clips in catalog" } satisfies NextStreamResponse,
+        { status: 404 }
+      );
     }
+
+    // 4. Pick the first eligible clip not yet played in this session
+    let chosen = eligible.find((r) => !playedSet.has(r.id));
+
+    // If the viewer has already watched every clip in the catalog, reset their session history and cycle cleanly
+    if (!chosen) {
+      chosen = eligible[0];
+      void dbWriter
+        .from("video_session_plays")
+        .delete()
+        .eq("session_id", sessionId)
+        .then(
+          () => {},
+          () => {}
+        );
+    }
+
+    // 5. Record play (best-effort, non-blocking)
+    void Promise.all([
+      dbWriter.from("video_session_plays").upsert({
+        session_id: sessionId,
+        video_id: chosen.id,
+        played_at: new Date().toISOString(),
+      }),
+      dbWriter
+        .from("video_catalog")
+        .update({
+          play_count: (chosen.play_count ?? 0) + 1,
+          last_played: new Date().toISOString(),
+        })
+        .eq("id", chosen.id),
+    ]).catch(() => {});
+
+    const response: NextStreamResponse = {
+      ok: true,
+      item: rowToVideoItem(chosen),
+    };
+    return NextResponse.json(response, {
+      headers: { "Cache-Control": "no-store, max-age=0" },
+    });
   } catch (err) {
     console.error("[next-stream] live mode error:", err);
+    return NextResponse.json(
+      { ok: false, item: null, error: "Failed to load clip from catalog" } satisfies NextStreamResponse,
+      { status: 500 }
+    );
   }
-
-  return demoResponse();
 }

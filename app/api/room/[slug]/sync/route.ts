@@ -9,13 +9,7 @@ import {
 import { getSupabaseReader } from "@/lib/supabase/admin";
 
 // ─── Deterministic Server-Clock Room Coordinator ─────────────────────────────
-// Computes CurrentClipOffset = ServerNow() - ClipStartTimestamp deterministically
-// from the Unix epoch across the active catalog so every viewer worldwide sees
-// the exact same frame even before Cloudflare PartyServer is configured.
-//
-// The shared catalog gate (English-only + Launch-Day post-launch filter) is applied
-// here too, so leaks/speculation/pre-launch uploads can never reach the screen
-// once the game is out.
+// Serves only real scraped clips from Supabase video_catalog (zero demo streams).
 
 function hashRoomOffset(slug: string): number {
   let h = 0;
@@ -24,24 +18,6 @@ function hashRoomOffset(slug: string): number {
   }
   return slug === "main" || slug === "main-theater" ? 0 : (h % 3600) * 1000;
 }
-
-const DEMO_FALLBACK: VideoItem[] = [
-  {
-    id: "demo-001",
-    source: "direct",
-    manifestUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-    title: "GTA VI — Leonida Vice Broadcast Feed",
-    creatorName: "LeonidaVice",
-    creatorUrl: "https://leonidavice.com",
-    platform: "direct",
-    platformIcon: "📡",
-    sourceUrl: "https://leonidavice.com",
-    durationSec: 120,
-    category: "gameplay",
-    fetchedAt: new Date(0).toISOString(),
-    playCount: 0,
-  },
-];
 
 // Short in-memory catalog cache (15s) to prevent hammering Supabase on concurrent sync checks
 let cachedPlaylist: VideoItem[] | null = null;
@@ -54,7 +30,7 @@ async function getActivePlaylist(): Promise<VideoItem[]> {
   }
 
   const supabase = getSupabaseReader();
-  if (!supabase) return DEMO_FALLBACK;
+  if (!supabase) return [];
 
   try {
     const { data: rows, error } = await supabase
@@ -62,7 +38,9 @@ async function getActivePlaylist(): Promise<VideoItem[]> {
       .select("*")
       .eq("is_active", true)
       .eq("is_approved", true)
-      .order("id", { ascending: true })
+      .neq("source_platform", "direct")
+      .not("id", "like", "demo-%")
+      .order("play_count", { ascending: true })
       .limit(200);
 
     if (error) throw error;
@@ -83,11 +61,10 @@ async function getActivePlaylist(): Promise<VideoItem[]> {
     }
   } catch (err) {
     console.error("[room-sync] catalog load error:", err);
-    // Serve stale cache rather than flapping to demo content on a transient DB error
     if (cachedPlaylist && cachedPlaylist.length > 0) return cachedPlaylist;
   }
 
-  return DEMO_FALLBACK;
+  return [];
 }
 
 export async function GET(
@@ -99,12 +76,26 @@ export async function GET(
   const playlist = await getActivePlaylist();
   const serverNow = Date.now();
 
+  if (playlist.length === 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        roomSlug,
+        serverNow,
+        current: null,
+        next: null,
+        clipStartTimestamp: serverNow,
+        currentOffsetMs: 0,
+      },
+      { status: 404, headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
+  }
+
   const durationsMs = playlist.map(
     (item) => Math.max(12, Math.min(item.durationSec || DEFAULT_CLIP_DURATION_SEC, 1800)) * 1000
   );
   const totalCycleMs = durationsMs.reduce((acc, d) => acc + d, 0);
 
-  // Deterministic position inside the global cycle (different rooms get deterministic phase shift)
   const shiftedNow = serverNow + hashRoomOffset(roomSlug);
   const posInCycleMs = shiftedNow % totalCycleMs;
 

@@ -91,9 +91,9 @@ export function resolveMediaUrl(
 ): { url: string; useAnonymousCors: boolean } {
   if (!rawUrl) return { url: "", useAnonymousCors: false };
 
-  // Same-origin and HLS (hls.js XHR; PeerTube/Mux send CORS headers) never need a proxy
+  // Same-origin and HLS (hls.js XHR) never need a proxy
   if (rawUrl.startsWith("/") || isHlsUrl(rawUrl)) {
-    return { url: rawUrl, useAnonymousCors: true };
+    return { url: rawUrl, useAnonymousCors: false };
   }
   if (!canProxyUrl(rawUrl)) return { url: rawUrl, useAnonymousCors: false };
 
@@ -701,58 +701,48 @@ export function useSeamlessPlayer(options: UseSeamlessPlayerOptions = {}) {
     };
   }, []);
 
-  // ── Audio & Playback Controls (Unlocks Web Audio Graph on First Gesture) ───
+  // ── Audio & Playback Controls ──────────────────────────────────────────────
   const unmute = useCallback(() => {
     if (!mutedRef.current) return;
     mutedRef.current = false;
 
-    const audioGraph = getDriveInAudioGraph();
-    audioGraph.unlock(playerARef.current, playerBRef.current);
-    audioGraph.setActiveSlot(activeSlot.current);
-    audioGraph.setMasterVolume(volumeRef.current, false);
-
     const el = activeEl();
-    applyVolumeToActiveElement(el);
-    if (el && el.paused) {
-      el.play().catch(() => {});
+    if (el) {
+      el.muted = false;
+      el.volume = volumeRef.current;
+      if (el.paused) {
+        el.play().catch(() => {});
+      }
     }
 
     setPlayerState((s) => ({ ...s, isMuted: false }));
-  }, [activeEl, applyVolumeToActiveElement]);
+  }, [activeEl]);
 
   const toggleMute = useCallback(() => {
     const newMuted = !mutedRef.current;
     mutedRef.current = newMuted;
 
-    const audioGraph = getDriveInAudioGraph();
-    if (!newMuted) {
-      audioGraph.unlock(playerARef.current, playerBRef.current);
-      audioGraph.setActiveSlot(activeSlot.current);
-    }
-    audioGraph.setMasterVolume(volumeRef.current, newMuted);
-
     const el = activeEl();
-    applyVolumeToActiveElement(el);
+    if (el) {
+      el.muted = newMuted;
+      el.volume = volumeRef.current;
+    }
     setPlayerState((s) => ({ ...s, isMuted: newMuted }));
-  }, [activeEl, applyVolumeToActiveElement]);
+  }, [activeEl]);
 
   const setVolume = useCallback(
     (vol: number) => {
       volumeRef.current = vol;
       mutedRef.current = vol === 0;
 
-      const audioGraph = getDriveInAudioGraph();
-      if (vol > 0) {
-        audioGraph.unlock(playerARef.current, playerBRef.current);
-        audioGraph.setActiveSlot(activeSlot.current);
-      }
-      audioGraph.setMasterVolume(vol, vol === 0);
-
       const el = activeEl();
-      applyVolumeToActiveElement(el);
+      if (el) {
+        el.volume = vol;
+        el.muted = vol === 0;
+      }
       setPlayerState((s) => ({ ...s, volume: vol, isMuted: vol === 0 }));
     },
-    [activeEl, applyVolumeToActiveElement]
+    [activeEl]
   );
 
   const skipToNext = useCallback(() => {
