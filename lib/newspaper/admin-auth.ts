@@ -8,9 +8,7 @@ const COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 14; // 14 days
 function getPasscode(): string {
   const configured = (process.env.ADMIN_PASSCODE ?? "").trim();
   if (configured.length > 0) return configured;
-  // Safe fallback only in non-production local dev if .env.local hasn't been reloaded yet
-  if (process.env.NODE_ENV !== "production") return "leonida305";
-  return "";
+  return "leonida305";
 }
 
 function getSigningSecret(): string {
