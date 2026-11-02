@@ -1,137 +1,193 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { cleanPolishedMarkdown, markdownToBlocks } from "@/lib/newspaper/clean-markdown";
+import type { Article, Block } from "@/lib/newspaper/types";
 
-interface Agent {
-  id: "chief" | "wire" | "sentinel" | "cruz";
+interface AgentProfile {
+  id: "wire" | "cruz" | "chief" | "sentinel";
   name: string;
   codename: string;
   role: string;
   model: string;
   avatar: string;
-  tagline: string;
   badgeColor: string;
 }
 
-const AGENTS: Agent[] = [
-  {
-    id: "chief",
-    name: "Vincent 'Chief' Vance",
-    codename: "CHIEF-120B",
-    role: "Senior Managing Editor & Deep Lore Synthesizer",
-    model: "openai/gpt-oss-120b",
-    avatar: "🏛️",
-    tagline: "Deep investigations, lore consistency, 1,400+ word feature drafts.",
-    badgeColor: "bg-[#831843] text-white",
-  },
+const AGENTS: AgentProfile[] = [
   {
     id: "wire",
     name: "Lexi 'Wire' Sterling",
     codename: "WIRE-20B",
-    role: "Breaking News Specialist & Strict CMS Formatter",
+    role: "Breaking News & Wire Interceptor",
     model: "openai/gpt-oss-20b",
     avatar: "⚡",
-    tagline: "High-speed news flashes, bullet takeaways, Strict JSON payloads.",
-    badgeColor: "bg-[#0f766e] text-white",
-  },
-  {
-    id: "sentinel",
-    name: "Sentinel-9 Watchdog",
-    codename: "SENTINEL-QA",
-    role: "Playwright Site Reliability & Media Decoder Auditor",
-    model: "openai/gpt-oss-20b + Playwright",
-    avatar: "🛡️",
-    tagline: "Monitors HTML5 video decoders, queue rotation, 404 links, and DOM text.",
-    badgeColor: "bg-[#1e222b] text-[#14b8a6]",
+    badgeColor: "bg-[#0f766e] text-white border-[#14b8a6]",
   },
   {
     id: "cruz",
     name: "Sgt. Cruz Safeguard",
     codename: "CRUZ-SAFEGUARD",
-    role: "Content Moderation & Video Submission Policy Guard",
+    role: "Take-Two IP & DMCA Policy Guard",
     model: "openai/gpt-oss-safeguard-20b",
     avatar: "👮",
-    tagline: "Screens user clip submissions, Citizen Wire chat flags, community safety.",
-    badgeColor: "bg-[#d97706] text-black",
+    badgeColor: "bg-[#d97706] text-black border-[#f59e0b]",
+  },
+  {
+    id: "chief",
+    name: "Vincent 'Chief' Vance",
+    codename: "CHIEF-120B",
+    role: "Senior Managing Editor & Lore Synthesizer",
+    model: "openai/gpt-oss-120b",
+    avatar: "🏛️",
+    badgeColor: "bg-[#831843] text-white border-[#f43f5e]",
+  },
+  {
+    id: "sentinel",
+    name: "Sentinel-9 Watchdog",
+    codename: "SENTINEL-QA",
+    role: "Site Reliability & Hero Asset Auditor",
+    model: "openai/gpt-oss-20b + Playwright",
+    avatar: "🛡️",
+    badgeColor: "bg-[#1e222b] text-[#14b8a6] border-[#0d9488]",
   },
 ];
 
-interface MemorySource {
-  title: string;
-  tier: string;
-  sourceFile: string;
+interface IntelligenceLead {
+  id: string;
+  topic: string;
+  category: string;
+  tag: string;
+  readMins: string;
+  summary: string;
+  icon: string;
 }
 
-interface ChatMessage {
-  id: string;
-  sender: "user" | "agent";
-  agentId: string;
-  text: string;
+const SCOUTED_LEADS: IntelligenceLead[] = [
+  {
+    id: "lead-1",
+    topic: "Vice Beach Marina Yacht Heists & Narcotics Smuggling",
+    category: "Story & Campaign",
+    tag: "Crime Syndicate",
+    readMins: "5 Min Feature",
+    summary: "High-value superyachts vanished along Starfish Isle marina; DEA intercept logs link midnight off-loading to Brian Heder's Keys smuggling ring.",
+    icon: "🌴",
+  },
+  {
+    id: "lead-2",
+    topic: "Kelly County Mud-Boggers & Grassrivers Swamp Airboat Depots",
+    category: "Leonida",
+    tag: "County Culture",
+    readMins: "4 Min Feature",
+    summary: "Airboat black-markets deep in the wetlands, armed swamp enclaves, localized alligator harvesting, and backwoods contraband logistics.",
+    icon: "🚜",
+  },
+  {
+    id: "lead-3",
+    topic: "Ambrosia Sugar Cane Processing Monopoly & Labor Extortion",
+    category: "Leonida",
+    tag: "Industrial Cartel",
+    readMins: "6 Min Feature",
+    summary: "Rural agro-industrial cartel holding municipal transport contracts hostage while exploiting migrant labor under private armed watch.",
+    icon: "🍬",
+  },
+  {
+    id: "lead-4",
+    topic: "Mount Kalaga High-Altitude Aerodynamics & RAGE 9 Physics",
+    category: "Tech & RAGE",
+    tag: "Engine Forensics",
+    readMins: "5 Min Feature",
+    summary: "Dynamic thermal updrafts, ray-traced atmospheric fog, glider drift vectors, and sub-surface rock tessellation on the state's highest peak.",
+    icon: "🏔️",
+  },
+  {
+    id: "lead-5",
+    topic: "Port Gellhorn Intermodal Shipping Contraband & Customs Bribes",
+    category: "Story & Campaign",
+    tag: "Port Logistics",
+    readMins: "4 Min Feature",
+    summary: "Falsified cargo manifests at the dry docks; automated container cranes moving un-manifested military surplus through industrial canals.",
+    icon: "⚓",
+  },
+  {
+    id: "lead-6",
+    topic: "Lucia & Jason First National Vice Bank Reconnaissance Blueprint",
+    category: "Story & Campaign",
+    tag: "Heist Blueprint",
+    readMins: "5 Min Feature",
+    summary: "Security vault acoustic sensors, guard shift rotation blindspots, and synchronized getaway corridors mapped across downtown Vice City.",
+    icon: "🏦",
+  },
+];
+
+interface ConsensusDialogue {
+  agentId: "wire" | "cruz" | "chief" | "sentinel";
+  name: string;
+  avatar: string;
+  role: string;
+  model: string;
+  stage: string;
   timestamp: string;
-  modelUsed?: string;
-  sources?: MemorySource[];
+  message: string;
 }
 
 interface AdminAiTeamTabProps {
   authHeaders: () => HeadersInit;
   onLoadDraftIntoComposer?: (title: string, bodyMarkdown: string) => void;
+  isStandalonePage?: boolean;
 }
 
 export default function AdminAiTeamTab({
   authHeaders,
   onLoadDraftIntoComposer,
+  isStandalonePage = false,
 }: AdminAiTeamTabProps) {
-  const [selectedAgentId, setSelectedAgentId] = useState<Agent["id"]>("chief");
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  // Groq API Key state
+  const [groqKey, setGroqKey] = useState<string>("");
+  const [showKeyConfig, setShowKeyConfig] = useState<boolean>(false);
+
+  // Dispatch Mode & Input
+  const [selectedLeadId, setSelectedLeadId] = useState<string>("lead-1");
+  const [customTopic, setCustomTopic] = useState<string>("");
+  const [publishImmediately, setPublishImmediately] = useState<boolean>(true);
+
+  // Live Consensus Execution State
+  const [isSpinningUp, setIsSpinningUp] = useState<boolean>(false);
+  const [activeStep, setActiveStep] = useState<number>(0); // 0: Idle, 1: Wire, 2: Cruz, 3: Chief, 4: Sentinel, 5: Done
+  const [statusMessage, setStatusMessage] = useState<string>("Consensus board standing by.");
+  const [auditLogs, setAuditLogs] = useState<string[]>([]);
+  const [dialogues, setDialogues] = useState<ConsensusDialogue[]>([
     {
-      id: "init-1",
-      sender: "agent",
       agentId: "chief",
-      text: "Boss, Vincent Vance reporting in from the Managing Desk. The Groq LPU cluster and Ultimate RAG Knowledge Base are primed. Transmit an order to any agent, or launch the 4-Agent Consensus Review Board below to draft and audit investigative dispatches directly into Draft storage.",
+      name: "Vincent 'Chief' Vance",
+      avatar: "🏛️",
+      role: "Senior Managing Editor & Lore Synthesizer",
+      model: "openai/gpt-oss-120b",
+      stage: "Command Center Initialized",
       timestamp: "Just now",
-      modelUsed: "openai/gpt-oss-120b",
-      sources: [
-        {
-          title: "SOP-01: Vincent 'Chief' Vance Investigative Feature & GEO Protocol",
-          tier: "procedural_sop",
-          sourceFile: "LEONIDA_VICE_AI_TEAM_SYSTEM_MANUAL.txt",
-        },
-      ],
+      message:
+        "Managing Desk online. The 4-agent consensus room is primed with our 4-Tier RAG knowledge base. Select a scouted intelligence lead or simply click '⚡ Spin Up New Article' to watch the editorial board collaborate in tandem and produce a 100% finished broadsheet dispatch.",
     },
   ]);
-  const [inputText, setInputText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [groqKey, setGroqKey] = useState<string>("");
-  const [showKeyConfig, setShowKeyConfig] = useState(false);
 
-  // Consensus Board Modal State
-  const [showBoardModal, setShowBoardModal] = useState(false);
-  const [boardTopic, setBoardTopic] = useState("");
-  const [boardRunning, setBoardRunning] = useState(false);
-  const [boardLog, setBoardLog] = useState<string[]>([]);
-  const [boardDraftResult, setBoardDraftResult] = useState<any>(null);
-  const [autoPublish, setAutoPublish] = useState(false);
+  // Current Generated Article State
+  const [currentArticle, setCurrentArticle] = useState<Article | null>(null);
+  const [publishedLiveUrl, setPublishedLiveUrl] = useState<string | null>(null);
+  const [isPublishingDraft, setIsPublishingDraft] = useState<boolean>(false);
 
-  // Quick 1-Click Publishing State
-  const [quickPublishingId, setQuickPublishingId] = useState<string | null>(null);
-  const [publishedAlert, setPublishedAlert] = useState<{
-    id: string;
-    title: string;
-    slug: string;
-    status: string;
-  } | null>(null);
+  // Recent Dispatches History
+  const [recentArticles, setRecentArticles] = useState<Article[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState<boolean>(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const activeAgent = AGENTS.find((a) => a.id === selectedAgentId) || AGENTS[0];
+  const showcaseRef = useRef<HTMLDivElement>(null);
 
+  // Load Groq API Key
   useEffect(() => {
     try {
       const saved = localStorage.getItem("lv_groq_api_key");
       if (saved) {
         setGroqKey(saved);
-      } else {
-        setShowKeyConfig(true);
       }
     } catch (_) {}
   }, []);
@@ -143,180 +199,69 @@ export default function AdminAiTeamTab({
     } catch (_) {}
   };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // SEND MESSAGE (SSE STREAMING AT ~500 TOK/S)
-  // ──────────────────────────────────────────────────────────────────────────
-  const handleSendMessage = async (textToSend?: string) => {
-    const text = (textToSend || inputText).trim();
-    if (!text || isLoading) return;
-
-    if (!groqKey) {
-      setShowKeyConfig(true);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: "err-" + Date.now(),
-          sender: "agent",
-          agentId: selectedAgentId,
-          text: "⚠️ Groq API key is required. Paste your Groq API key in the '⚡ Groq API Key' bar above and click 'Connect & Save' to transmit orders to the editorial desk.",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          modelUsed: "System Notice",
-        },
-      ]);
-      return;
-    }
-
-    const userMsg: ChatMessage = {
-      id: "u-" + Date.now(),
-      sender: "user",
-      agentId: selectedAgentId,
-      text,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    const assistantId = "a-" + Date.now();
-    const assistantMsg: ChatMessage = {
-      id: assistantId,
-      sender: "agent",
-      agentId: selectedAgentId,
-      text: "",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      modelUsed: activeAgent.model,
-      sources: [],
-    };
-
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    if (!textToSend) setInputText("");
-    setIsLoading(true);
-
+  // Fetch recent articles for the history drawer
+  const fetchRecentArticles = async () => {
+    setLoadingRecent(true);
     try {
-      const historyPayload = messages
-        .filter((m) => m.agentId === selectedAgentId)
-        .slice(-6)
-        .map((m) => ({
-          role: m.sender === "user" ? "user" : "assistant",
-          content: m.text,
-        }));
-
-      const res = await fetch("/api/admin/ai-team", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-groq-api-key": groqKey,
-          ...authHeaders(),
-        },
-        body: JSON.stringify({
-          agentId: selectedAgentId,
-          message: text,
-          groqApiKey: groqKey,
-          history: historyPayload,
-          stream: true,
-        }),
+      const res = await fetch("/api/admin/articles", {
+        headers: authHeaders(),
       });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to reach AI Team agent.");
-      }
-
-      const reader = res.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let accumulated = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const jsonStr = trimmed.slice(6);
-
-            try {
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.type === "sources" && parsed.sources) {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId
-                      ? {
-                          ...m,
-                          sources: parsed.sources,
-                          modelUsed: parsed.agent?.model || m.modelUsed,
-                        }
-                      : m
-                  )
-                );
-              } else if (parsed.type === "token" && parsed.token) {
-                accumulated += parsed.token;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId ? { ...m, text: accumulated } : m
-                  )
-                );
-              } else if (parsed.type === "error") {
-                throw new Error(parsed.error);
-              }
-            } catch (_) {}
-          }
-        }
-
-        if (!accumulated) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId && !m.text
-                ? { ...m, text: "Standing by for orders, Boss." }
-                : m
-            )
-          );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.articles && Array.isArray(data.articles)) {
+          setRecentArticles(data.articles.slice(0, 8));
         }
       }
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                text: `⚠️ [Agent Connection Error]: ${errMsg}`,
-                modelUsed: "Error",
-              }
-            : m
-        )
-      );
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (_) {}
+    setLoadingRecent(false);
   };
 
+  useEffect(() => {
+    fetchRecentArticles();
+  }, []);
+
   // ──────────────────────────────────────────────────────────────────────────
-  // RUN 4-AGENT CONSENSUS REVIEW BOARD (SAVES TO STORE AS 'DRAFT')
+  // ⚡ 1-CLICK SPIN UP NEW ARTICLE (AUTONOMOUS 4-AGENT TANDEM GENERATION)
   // ──────────────────────────────────────────────────────────────────────────
-  const handleRunConsensusBoard = async () => {
-    if (!boardTopic.trim() || boardRunning) return;
-    if (!groqKey) {
-      setShowKeyConfig(true);
-      alert("Please enter and save your Groq API key first.");
-      return;
+  const handleSpinUpArticle = async (leadOverride?: IntelligenceLead) => {
+    if (isSpinningUp) return;
+
+    // Determine target topic
+    let targetTopic = customTopic.trim();
+    if (!targetTopic) {
+      const lead = leadOverride || SCOUTED_LEADS.find((l) => l.id === selectedLeadId) || SCOUTED_LEADS[0];
+      targetTopic = lead.topic;
     }
 
-    setBoardRunning(true);
-    setBoardLog([
-      `[*] Initializing 4-Agent LangGraph Consensus Board on Groq LPU...`,
-      `[*] Assigned Topic: "${boardTopic.trim()}"`,
-      `[*] Target Output: ${autoPublish ? "Direct Live Publishing" : "Saved as Draft"}`,
-      `[*] Recall Scope: Procedural SOPs, HD Canon Lore, Take-Two IP constraints`,
-    ]);
-    setBoardDraftResult(null);
+    setIsSpinningUp(true);
+    setActiveStep(1);
+    setStatusMessage(`Intercepting wire traffic for "${targetTopic}"...`);
+    setPublishedLiveUrl(null);
+    setCurrentArticle(null);
+
+    const initialLogs = [
+      `[*] Groq LPU Cluster Initialized: ~500 tok/s throughput active.`,
+      `[*] Target Lead: "${targetTopic}"`,
+      `[*] Target Status: ${publishImmediately ? "Direct Live Publishing (Published)" : "Saved as Polished Draft"}`,
+      `[*] 4-Tier RAG Engine Querying: Ingesting HD Canon, County Geography, and Take-Two IP Bounds...`,
+    ];
+    setAuditLogs(initialLogs);
+
+    // Simulated progress transitions while waiting for Groq LPU response
+    const stepTimer1 = setTimeout(() => {
+      setActiveStep(2);
+      setStatusMessage("Sgt. Cruz screening dispatch against Take-Two IP & DMCA Safe Harbor...");
+    }, 1800);
+
+    const stepTimer2 = setTimeout(() => {
+      setActiveStep(3);
+      setStatusMessage("Chief Vance synthesizing HD lore & elevating prose into broadsheet copy...");
+    }, 3600);
+
+    const stepTimer3 = setTimeout(() => {
+      setActiveStep(4);
+      setStatusMessage("Sentinel-9 binding 4K hero asset & constructing clean layout blocks...");
+    }, 5400);
 
     try {
       const res = await fetch("/api/admin/ai-team", {
@@ -328,26 +273,100 @@ export default function AdminAiTeamTab({
         },
         body: JSON.stringify({
           action: "board_draft",
-          topic: boardTopic.trim(),
-          publishImmediately: autoPublish,
+          topic: targetTopic,
+          publishImmediately,
           groqApiKey: groqKey,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Consensus board execution failed.");
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
 
-      setBoardLog(data.auditLog || ["Consensus loop complete."]);
-      setBoardDraftResult(data.article);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Autonomous consensus pipeline failed.");
+      }
+
+      setActiveStep(5);
+      setStatusMessage("Consensus reached! Broadsheet feature generated & verified.");
+
+      if (data.auditLog && Array.isArray(data.auditLog)) {
+        setAuditLogs(data.auditLog);
+      }
+
+      if (data.consensusDialogues && Array.isArray(data.consensusDialogues)) {
+        setDialogues(data.consensusDialogues);
+      }
+
+      if (data.article) {
+        setCurrentArticle(data.article);
+        if (data.article.status === "published") {
+          // Exact canonical slug returned by server
+          setPublishedLiveUrl(`/article/${data.article.slug}`);
+        }
+      }
+
+      // Refresh recent dispatches
+      fetchRecentArticles();
+
+      // Smooth scroll to broadsheet showcase
+      setTimeout(() => {
+        showcaseRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 350);
     } catch (err: any) {
-      setBoardLog((prev) => [...prev, `[X] Pipeline Error: ${err.message || String(err)}`]);
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
+      setActiveStep(0);
+      setStatusMessage(`Error: ${err.message || String(err)}`);
+      setAuditLogs((prev) => [...prev, `[X] Pipeline Execution Failed: ${err.message}`]);
     } finally {
-      setBoardRunning(false);
+      setIsSpinningUp(false);
     }
   };
 
-  // 1-Click Approve Draft from Modal
-  const handleQuickPublishFromModal = async (art: any) => {
+  // ──────────────────────────────────────────────────────────────────────────
+  // 🚀 1-CLICK APPROVE & PUBLISH LIVE NOW (FOR DRAFTS)
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleApproveAndPublishLive = async () => {
+    if (!currentArticle || isPublishingDraft) return;
+
+    setIsPublishingDraft(true);
+    try {
+      const res = await fetch("/api/admin/articles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          ...currentArticle,
+          status: "published",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to publish article.");
+      }
+
+      const publishedArticle = data.article || { ...currentArticle, status: "published" };
+      setCurrentArticle(publishedArticle);
+      // Canonical verified slug
+      setPublishedLiveUrl(`/article/${publishedArticle.slug}`);
+      fetchRecentArticles();
+    } catch (err: any) {
+      alert(`Publish error: ${err.message}`);
+    } finally {
+      setIsPublishingDraft(false);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 1-CLICK PUBLISH A RECENT DRAFT FROM THE DRAWER
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleQuickPublishRecentDraft = async (art: Article) => {
     try {
       const res = await fetch("/api/admin/articles", {
         method: "POST",
@@ -361,592 +380,707 @@ export default function AdminAiTeamTab({
         }),
       });
       if (res.ok) {
-        setBoardDraftResult((prev: any) => ({ ...prev, status: "published" }));
-        setBoardLog((prev) => [...prev, `[OK] ✓ 1-Click Approved & Published LIVE to Front Page!`]);
-      } else {
-        const d = await res.json().catch(() => ({}));
-        setBoardLog((prev) => [...prev, `[X] Publish error: ${d.error || "Failed"}`]);
-      }
-    } catch (err: any) {
-      setBoardLog((prev) => [...prev, `[X] Publish error: ${err.message}`]);
-    }
-  };
-
-  // 1-Click Publish or Save Draft directly from Chatbox Response
-  const handleQuickPublishFromChat = async (
-    msgId: string,
-    rawText: string,
-    targetStatus: "published" | "draft"
-  ) => {
-    setQuickPublishingId(msgId);
-    try {
-      const cleanBody = cleanPolishedMarkdown(rawText);
-      const lines = cleanBody.split("\n").map((l) => l.trim()).filter(Boolean);
-      let cleanTitle = "AI Investigative Dispatch";
-      for (const l of lines) {
-        const t = l.replace(/^#+\s*/, "").replace(/^Headline:\s*/i, "").replace(/^Title:\s*/i, "").trim();
-        if (t.length > 5 && !t.toLowerCase().startsWith("block") && !t.toLowerCase().startsWith("sop")) {
-          cleanTitle = t.slice(0, 60);
-          break;
+        const data = await res.json();
+        fetchRecentArticles();
+        if (data.article) {
+          setCurrentArticle(data.article);
+          setPublishedLiveUrl(`/article/${data.article.slug}`);
         }
       }
-
-      const cleanSlug = cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 45);
-      const articlePayload = {
-        slug: cleanSlug,
-        title: cleanTitle,
-        category: "story",
-        author: "vincent-chief-vance",
-        date: new Date().toISOString().split("T")[0],
-        image: "/images/gta/vice_city_01.jpg",
-        excerpt: cleanBody.slice(0, 150) + "...",
-        readMins: Math.max(3, Math.round(cleanBody.split(/\s+/).length / 200)),
-        tags: ["GTA 6", "Leonida"],
-        body: markdownToBlocks(cleanBody),
-        status: targetStatus,
-        preset: "standard-feature",
-        kicker: targetStatus === "published" ? "VERIFIED DISPATCH" : "AI EDITORIAL DRAFT",
-      };
-
-      const res = await fetch("/api/admin/articles", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
-        body: JSON.stringify(articlePayload),
-      });
-
-      if (res.ok) {
-        setPublishedAlert({
-          id: msgId,
-          title: cleanTitle,
-          slug: cleanSlug,
-          status: targetStatus,
-        });
-      } else {
-        const d = await res.json().catch(() => ({}));
-        alert(`Error: ${d.error || "Failed to save article"}`);
-      }
-    } catch (err: any) {
-      alert(`Publish error: ${err.message}`);
-    } finally {
-      setQuickPublishingId(null);
-    }
+    } catch (_) {}
   };
 
-  const quickPrompts = [
-    {
-      label: "📰 Draft Lucia & Jason Feature",
-      text: "Chief, draft a 1,400-word investigative article about Lucia and Jason executing a tactical stick-up in Vice Beach using RAGE 9 ocean wave timing.",
-    },
-    {
-      label: "⚡ 3 Breaking News Flashes",
-      text: "Lexi, give me 3 ultra-punchy breaking news flashes and social headlines about the latest Grand Theft Auto VI leaks.",
-    },
-    {
-      label: "🛡️ Run Site Decoder Check",
-      text: "Sentinel-9, report on current HTML5 video playback health and broadcast queue rotation.",
-    },
-    {
-      label: "👮 Check Clip Policy",
-      text: "Sgt. Cruz, what are the primary red flags to reject when screening user submissions in SubmitClipModal?",
-    },
-  ];
-
   return (
-    <div className="max-w-[1560px] mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* ── TOP HEADER / BANNER ── */}
-      <div className="bg-[#121212] text-[#faf9f6] border border-black p-5 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🤖</span>
-            <h2 className="text-lg font-bold uppercase tracking-wider font-mono">
-              Leonida Vice — AI Editorial Team War Room
-            </h2>
-            <span className="bg-[#0f766e] text-white text-[11px] font-mono px-2 py-0.5 uppercase tracking-wider font-bold">
-              Groq LPU Connected
-            </span>
-            <span className="bg-[#831843] text-white text-[11px] font-mono px-2 py-0.5 uppercase tracking-wider font-bold">
-              Ultimate RAG (57 Chunks)
-            </span>
-          </div>
-          <p className="text-xs text-[#8c887e] mt-1">
-            Direct prompt communication channel with your 4-agent Groq Language Processing Unit team.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 text-xs font-mono">
-          <button
-            type="button"
-            onClick={() => setShowBoardModal(true)}
-            className="bg-[#831843] hover:bg-[#9f1239] text-white px-3.5 py-1.5 border border-[#9f1239] font-bold uppercase cursor-pointer flex items-center gap-1.5 transition-colors shadow-sm"
-          >
-            <span>🏛️</span>
-            <span>Launch Consensus Board</span>
-          </button>
-          <div className="bg-[#1e222b] px-3 py-1.5 border border-[#242834]">
-            <span className="text-[#8c887e]">Throughput:</span>{" "}
-            <span className="text-[#14b8a6] font-bold">~500 tok/s</span>
-          </div>
-          <div className="bg-[#1e222b] px-3 py-1.5 border border-[#242834]">
-            <span className="text-[#8c887e]">Prompt Caching:</span>{" "}
-            <span className="text-[#14b8a6] font-bold">50% Active</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowKeyConfig(!showKeyConfig)}
-            className="bg-[#1e222b] hover:bg-[#242834] text-[#faf9f6] px-3 py-1.5 border border-[#242834] cursor-pointer"
-          >
-            ⚙️ Key: {groqKey ? `${groqKey.slice(0, 7)}...` : "Configure"}
-          </button>
-        </div>
-      </div>
-
-      {showKeyConfig && (
-        <div className="bg-[#16181f] text-white p-4 border border-[#0f766e] flex flex-wrap items-center gap-3 text-xs font-mono shadow-md">
-          <span className="text-[#14b8a6] font-bold">⚡ Groq API Key:</span>
-          <input
-            type="password"
-            value={groqKey}
-            onChange={(e) => saveCustomKey(e.target.value)}
-            placeholder="Paste your Groq API key (gsk_...) here"
-            className="flex-1 min-w-[280px] bg-black border border-[#323c4e] px-3 py-1.5 text-white focus:outline-none focus:border-[#14b8a6]"
-          />
-          <button
-            type="button"
-            onClick={() => setShowKeyConfig(false)}
-            className="bg-[#0f766e] hover:bg-[#14b8a6] text-white px-4 py-1.5 font-bold uppercase transition-colors cursor-pointer"
-          >
-            ✓ Connect & Save
-          </button>
-          <span className="text-[11px] text-[#8c887e] w-full">
-            Key is securely stored in your browser storage for this session and sent directly to the Groq LPU cluster.
-          </span>
-        </div>
-      )}
-
-      {/* ── 4 AGENT VISUAL ROSTER CARDS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {AGENTS.map((agent) => {
-          const isSelected = agent.id === selectedAgentId;
-          return (
-            <button
-              key={agent.id}
-              onClick={() => setSelectedAgentId(agent.id)}
-              className={`text-left p-4 border transition-all relative ${
-                isSelected
-                  ? "bg-[#faf9f6] border-[#831843] border-b-[4px] shadow-sm ring-1 ring-[#831843]"
-                  : "bg-white border-black/20 hover:border-black/50 hover:bg-[#faf9f6]"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{agent.avatar}</span>
-                  <div>
-                    <h3 className="font-bold text-sm leading-tight text-[#121212]">
-                      {agent.name}
-                    </h3>
-                    <span className="text-[10px] font-mono text-[#737373] uppercase tracking-wider">
-                      {agent.codename}
-                    </span>
-                  </div>
-                </div>
-                <span className="flex h-2.5 w-2.5 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-              </div>
-
-              <div className="mb-2">
-                <span className={`inline-block text-[10px] font-mono font-bold px-1.5 py-0.5 ${agent.badgeColor}`}>
-                  {agent.model}
-                </span>
-              </div>
-
-              <p className="text-[11px] text-[#575b5f] line-clamp-2 leading-relaxed">
-                {agent.tagline}
-              </p>
-
-              {isSelected && (
-                <div className="mt-3 pt-2 border-t border-black/10 flex items-center justify-between text-[11px] font-bold text-[#831843]">
-                  <span>Active Channel &bull; Ready</span>
-                  <span>&rarr;</span>
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── MAIN INTERACTIVE CHAT WINDOW ── */}
-      <div className="bg-white border border-black border-b-[4px] flex flex-col h-[620px]">
-        {/* Chat Header */}
-        <div className="border-b border-black/10 p-4 bg-[#faf9f6] flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{activeAgent.avatar}</span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-[#121212]">{activeAgent.name}</h3>
-                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 ${activeAgent.badgeColor}`}>
-                  {activeAgent.model}
-                </span>
-                <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 font-bold">
-                  ⚡ SSE Streaming Active
-                </span>
-              </div>
-              <p className="text-xs text-[#737373]">{activeAgent.role}</p>
+    <div className="w-full bg-[#0d1117] text-slate-100 min-h-screen font-sans border-b border-black">
+      {/* ────────────────────────────────────────────────────────────────────────
+          1. COMMAND CENTER HERO HEADER & REAL-TIME TELEMETRY
+      ──────────────────────────────────────────────────────────────────────── */}
+      <div className="bg-[#161b22] border-b border-[#30363d] px-4 md:px-8 py-5">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">🏛️</span>
+              <h1 className="text-xl md:text-2xl font-black tracking-wide text-white font-serif uppercase">
+                Leonida Vice <span className="text-[#38bdf8] font-mono font-bold text-lg">Consensus Command Center</span>
+              </h1>
+              <span className="bg-[#1f2937] text-[#38bdf8] text-[10px] font-mono px-2 py-0.5 rounded border border-[#38bdf8]/30">
+                GROQ LPU CLUSTER
+              </span>
             </div>
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl font-mono">
+              Unified 4-Agent Autonomous Broadsheet Wireroom. All agents work in tandem to intercept, screen, verify lore, and publish print-ready investigative dispatches with zero manual editing.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Telemetry Status Pills & Key Settings */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#0d1117] border border-emerald-500/40 text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>LPU: ~500 tok/s</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#0d1117] border border-[#38bdf8]/40 text-[#38bdf8]">
+              <span>📚 4-Tier RAG (57 Chunks)</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#0d1117] border border-amber-500/40 text-amber-300">
+              <span>⚖️ SOP-04 IP Harbor</span>
+            </div>
             <button
-              onClick={() => setMessages([])}
-              className="text-xs text-[#737373] hover:text-black font-mono border border-black/20 px-2 py-1 bg-white hover:bg-neutral-100"
+              type="button"
+              onClick={() => setShowKeyConfig(!showKeyConfig)}
+              className="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] border border-slate-700 text-slate-300 text-xs transition-colors"
             >
-              Clear Log
+              🔑 {groqKey ? "Groq Key Configured" : "Config Key"}
             </button>
-          </div>
-        </div>
-
-        {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#faf9f6]/40">
-          {messages.map((m) => {
-            const isUser = m.sender === "user";
-            const senderAgent = AGENTS.find((a) => a.id === m.agentId) || activeAgent;
-            return (
-              <div
-                key={m.id}
-                className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
+            {!isStandalonePage && (
+              <Link
+                href="/admin/consensus"
+                target="_blank"
+                className="px-2.5 py-1 rounded bg-[#831843] hover:bg-[#9d174d] text-white font-bold text-xs transition-colors flex items-center gap-1"
               >
-                <div className="flex items-center gap-2 mb-1 px-1">
-                  <span className="text-xs font-bold text-[#121212]">
-                    {isUser ? "You (Editor-in-Chief)" : `${senderAgent.avatar} ${senderAgent.name}`}
-                  </span>
-                  <span className="text-[10px] text-[#737373] font-mono">{m.timestamp}</span>
-                  {m.modelUsed && (
-                    <span className="text-[9px] font-mono bg-neutral-200 text-neutral-800 px-1 rounded">
-                      {m.modelUsed}
-                    </span>
-                  )}
-                </div>
-
-                <div
-                  className={`max-w-[85%] rounded p-4 text-sm leading-relaxed whitespace-pre-wrap ${
-                    isUser
-                      ? "bg-[#121212] text-[#faf9f6] shadow-sm"
-                      : "bg-white text-[#121212] border border-black/15 shadow-sm font-sans"
-                  }`}
-                >
-                  {m.text || (
-                    <span className="inline-flex items-center gap-1.5 text-neutral-400 font-mono text-xs">
-                      <span className="animate-spin inline-block h-3 w-3 border-2 border-[#831843] border-t-transparent rounded-full"></span>
-                      Streaming tokens from Groq LPU...
-                    </span>
-                  )}
-                </div>
-
-                {/* Recalled Memory Source Badges */}
-                {!isUser && m.sources && m.sources.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 max-w-[85%]">
-                    <span className="text-[10px] font-mono text-[#737373] font-bold">
-                      📚 Knowledge Base Recall:
-                    </span>
-                    {m.sources.map((src, sIdx) => (
-                      <span
-                        key={sIdx}
-                        title={`Source File: ${src.sourceFile}`}
-                        className="text-[10px] font-mono bg-[#f3efe6] text-[#831843] border border-[#831843]/20 px-2 py-0.5 rounded"
-                      >
-                        [{src.tier.toUpperCase()}] {src.title}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* If the message looks like an article draft: 1-Click Publish, 1-Click Save Draft, or Edit */}
-                {!isUser && m.text.length > 250 && (
-                  <div className="mt-2.5 pt-2 border-t border-black/10 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={quickPublishingId === m.id}
-                      onClick={() => handleQuickPublishFromChat(m.id, m.text, "published")}
-                      className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-neutral-400 text-white text-[11px] font-mono font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
-                      title="Instantly publish this article live without editing"
-                    >
-                      <span>🚀 1-Click Publish Live</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={quickPublishingId === m.id}
-                      onClick={() => handleQuickPublishFromChat(m.id, m.text, "draft")}
-                      className="bg-[#1e222b] hover:bg-black disabled:bg-neutral-400 text-[#faf9f6] text-[11px] font-mono font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 border border-black/20 cursor-pointer"
-                      title="Save as a draft in the Admin Desk without editing"
-                    >
-                      <span>💾 Save as Ready Draft</span>
-                    </button>
-                    {onLoadDraftIntoComposer && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const clean = cleanPolishedMarkdown(m.text);
-                          const firstLine = clean.split("\n")[0].replace(/^#+\s*/, "").slice(0, 60);
-                          onLoadDraftIntoComposer(firstLine || "AI Dispatch", clean);
-                        }}
-                        className="text-[11px] text-[#831843] hover:underline font-mono font-bold flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>📝 Edit in Composer (Optional)</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {publishedAlert && publishedAlert.id === m.id && (
-                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-600 rounded text-xs text-emerald-900 font-mono flex items-center justify-between gap-2 max-w-[85%] shadow-sm">
-                    <span>
-                      ✓ {publishedAlert.status === "published" ? "Published Live to Front Page!" : "Saved to Draft Queue:"}{" "}
-                      <strong>"{publishedAlert.title}"</strong>
-                    </span>
-                    {publishedAlert.status === "published" && (
-                      <a
-                        href={`/article/${publishedAlert.slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-emerald-700 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase hover:bg-emerald-800"
-                      >
-                        View Live ↗
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <div ref={messagesEndRef} />
+                <span>Fullscreen Room ↗</span>
+              </Link>
+            )}
+          </div>
         </div>
 
-        {/* Quick Suggestion Chips */}
-        <div className="px-4 py-2 border-t border-black/10 bg-[#f3efe6]/50 flex flex-wrap gap-2">
-          <span className="text-[11px] text-[#737373] font-mono self-center">Quick Orders:</span>
-          {quickPrompts.map((p, idx) => (
+        {/* Collapsible Groq Key Drawer */}
+        {showKeyConfig && (
+          <div className="max-w-7xl mx-auto mt-4 pt-3 border-t border-[#30363d] flex flex-col md:flex-row items-center gap-3">
+            <span className="text-xs font-mono text-slate-400 whitespace-nowrap">Groq API Key:</span>
+            <input
+              type="password"
+              value={groqKey}
+              onChange={(e) => setGroqKey(e.target.value)}
+              placeholder="gsk_..."
+              className="w-full md:w-96 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded text-xs text-white font-mono focus:border-[#38bdf8] focus:outline-none"
+            />
             <button
-              key={idx}
-              onClick={() => handleSendMessage(p.text)}
-              disabled={isLoading}
-              className="text-[11px] bg-white border border-black/20 hover:border-[#831843] hover:text-[#831843] px-2.5 py-1 rounded transition-colors text-left"
+              type="button"
+              onClick={() => {
+                saveCustomKey(groqKey);
+                alert("Groq API key saved successfully.");
+                setShowKeyConfig(false);
+              }}
+              className="px-3 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition-colors whitespace-nowrap"
             >
-              {p.label}
+              Save Key
             </button>
-          ))}
-        </div>
-
-        {/* Input Bar */}
-        <div className="p-3 border-t border-black bg-white flex items-center gap-2">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            placeholder={`Message ${activeAgent.name}... (Press Enter to send, Shift+Enter for new line)`}
-            rows={2}
-            className="flex-1 resize-none border border-black/20 p-2 text-sm focus:outline-none focus:border-black font-sans"
-            disabled={isLoading}
-          />
-          <button
-            onClick={() => handleSendMessage()}
-            disabled={isLoading || !inputText.trim()}
-            className="bg-[#831843] hover:bg-[#9f1239] disabled:bg-neutral-300 text-white font-bold px-6 py-4 text-xs uppercase tracking-wider font-mono transition-colors"
-          >
-            {isLoading ? "Streaming..." : "Send Order"}
-          </button>
-        </div>
+            <span className="text-[11px] text-slate-500 font-mono">
+              Saved securely to your browser session. Runs open-weights LPU at ~500 tok/s.
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* ── AUTONOMOUS REVIEW BOARD MODAL ── */}
-      {showBoardModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121212] text-white border border-black border-b-[6px] max-w-2xl w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-[#242834]">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🏛️</span>
-                <div>
-                  <h3 className="font-bold text-base font-mono uppercase tracking-wider">
-                    Autonomous Consensus Review Board
-                  </h3>
-                  <p className="text-xs text-[#8c887e]">
-                    Cyclical 4-Agent Pipeline: Wire (20B) &rarr; Cruz (20B Safeguard) &rarr; Vance (120B) &rarr; Sentinel-9 (Draft Save)
-                  </p>
-                </div>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-8">
+        {/* ────────────────────────────────────────────────────────────────────────
+            2. AUTONOMOUS MISSION CONTROL (1-CLICK SPIN UP & SCOUT DECK)
+        ──────────────────────────────────────────────────────────────────────── */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-5 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-5 border-b border-[#30363d]">
+            {/* Primary Action Button */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <button
                 type="button"
-                onClick={() => setShowBoardModal(false)}
-                className="text-[#8c887e] hover:text-white font-mono text-sm px-2 py-1"
+                disabled={isSpinningUp}
+                onClick={() => handleSpinUpArticle()}
+                className={`relative px-8 py-4 rounded-md font-black text-sm md:text-base uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-3 shadow-lg ${
+                  isSpinningUp
+                    ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-[#0284c7] via-[#0ea5e9] to-[#38bdf8] text-black hover:brightness-110 active:scale-[0.99] ring-2 ring-[#38bdf8]/50 shadow-[#38bdf8]/20"
+                }`}
               >
-                ✕
+                {isSpinningUp ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Agents Forging Dispatch...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xl">⚡</span>
+                    <span>Spin Up New Article</span>
+                  </>
+                )}
               </button>
+
+              {/* Publishing Mode Toggle */}
+              <div className="flex items-center gap-2 bg-[#0d1117] border border-[#30363d] p-1.5 rounded-md">
+                <button
+                  type="button"
+                  onClick={() => setPublishImmediately(true)}
+                  className={`px-3 py-1.5 text-xs font-mono font-bold rounded transition-colors ${
+                    publishImmediately
+                      ? "bg-emerald-600 text-white shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  ⚡ Auto-Publish Live
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPublishImmediately(false)}
+                  className={`px-3 py-1.5 text-xs font-mono font-bold rounded transition-colors ${
+                    !publishImmediately
+                      ? "bg-amber-600 text-white shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  📋 Save as Ready Draft
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-mono font-bold text-[#faf9f6] uppercase mb-1">
-                Story Topic / Investigative Lead:
-              </label>
-              <input
-                type="text"
-                value={boardTopic}
-                onChange={(e) => setBoardTopic(e.target.value)}
-                placeholder="e.g. Ambrosia Sugar Cane Cartel Logistics, Mount Kalaga High Altitude Physics"
-                className="w-full bg-[#1e222b] border border-[#323c4e] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#831843] font-sans"
-                disabled={boardRunning}
-              />
-              <span className="text-[11px] text-[#8c887e] block mt-1">
-                The 4-agent board will draft, audit Take-Two IP constraints, verify canon lore, and format broadsheet copy.
+            {/* Current Pipeline Status */}
+            <div className="flex items-center gap-3 bg-[#0d1117] px-4 py-2.5 rounded border border-[#30363d]">
+              <span className={`w-3 h-3 rounded-full ${isSpinningUp ? "bg-amber-400 animate-ping" : "bg-emerald-400"}`} />
+              <div className="text-xs font-mono">
+                <div className="text-slate-400 text-[10px]">CONSENSUS PIPELINE STATUS:</div>
+                <div className="text-slate-200 font-semibold">{statusMessage}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Scouted Intelligence Leads Carousel ("Select a Lead or Hit Spin Up") */}
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🎯</span>
+                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-300 font-bold">
+                  Pre-Scouted Intelligence Leads (Click to Target)
+                </h3>
+              </div>
+              <span className="text-[11px] font-mono text-slate-400">
+                Or leave default & click "⚡ Spin Up New Article"
               </span>
             </div>
 
-            {/* Publishing Mode Toggle */}
-            <div className="flex items-center justify-between p-3 bg-[#1e222b] border border-[#323c4e] rounded">
-              <div>
-                <span className="text-xs font-mono font-bold text-white block">
-                  Publishing Strategy:
-                </span>
-                <span className="text-[11px] text-[#8c887e]">
-                  {autoPublish
-                    ? "Direct live deployment: Article goes straight to front page after passing Cruz & Vance."
-                    : "Draft mode: Article is audited and saved to desk for your final 1-click approval."}
-                </span>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer font-mono text-xs select-none">
-                <input
-                  type="checkbox"
-                  checked={autoPublish}
-                  onChange={(e) => setAutoPublish(e.target.checked)}
-                  className="w-4 h-4 accent-emerald-500 cursor-pointer"
-                />
-                <span className={autoPublish ? "text-emerald-400 font-bold" : "text-[#8c887e]"}>
-                  {autoPublish ? "⚡ Auto-Publish Live" : "Save as Draft"}
-                </span>
-              </label>
-            </div>
-
-            {/* Execution Trace Log */}
-            {boardLog.length > 0 && (
-              <div className="bg-black border border-[#242834] p-3 rounded font-mono text-xs max-h-48 overflow-y-auto space-y-1">
-                {boardLog.map((logLine, idx) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {SCOUTED_LEADS.map((lead) => {
+                const isSelected = selectedLeadId === lead.id && !customTopic.trim();
+                return (
                   <div
-                    key={idx}
-                    className={
-                      logLine.includes("Error") || logLine.includes("[X]")
-                        ? "text-red-400"
-                        : logLine.includes("approved") || logLine.includes("committed") || logLine.includes("[OK]")
-                        ? "text-emerald-400"
-                        : "text-[#8c887e]"
-                    }
-                  >
-                    {logLine}
-                  </div>
-                ))}
-                {boardRunning && (
-                  <div className="text-amber-400 flex items-center gap-2 pt-1">
-                    <span className="animate-spin inline-block h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full"></span>
-                    <span>4-Agent consensus loop active on Groq LPUs...</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Draft Result Banner */}
-            {boardDraftResult && (
-              <div className="bg-[#143026] border border-emerald-600 p-4 rounded text-xs text-white space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-emerald-300 font-mono text-sm">
-                    {boardDraftResult.status === "published"
-                      ? "✓ Article Successfully Published LIVE to Front Page!"
-                      : "✓ Article Successfully Audited & Saved as DRAFT!"}
-                  </span>
-                  <span
-                    className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] uppercase ${
-                      boardDraftResult.status === "published"
-                        ? "bg-emerald-600 text-white"
-                        : "bg-amber-500 text-black"
+                    key={lead.id}
+                    onClick={() => {
+                      setSelectedLeadId(lead.id);
+                      setCustomTopic("");
+                    }}
+                    className={`p-3.5 rounded border cursor-pointer transition-all ${
+                      isSelected
+                        ? "bg-[#1f2937] border-[#38bdf8] ring-1 ring-[#38bdf8]/40 shadow-md"
+                        : "bg-[#0d1117] border-[#30363d] hover:border-slate-500 hover:bg-[#161b22]"
                     }`}
                   >
-                    Status: {boardDraftResult.status}
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <span className="text-lg">{lead.icon}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#21262d] text-slate-300 border border-slate-700">
+                          {lead.tag}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">{lead.readMins}</span>
+                      </div>
+                    </div>
+                    <h4 className="font-bold text-xs text-white leading-snug line-clamp-2 mb-1">
+                      {lead.topic}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-2">
+                      {lead.summary}
+                    </p>
+                    <div className="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-400">{lead.category}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSpinUpArticle(lead);
+                        }}
+                        disabled={isSpinningUp}
+                        className="text-[10px] font-mono text-[#38bdf8] hover:underline font-bold flex items-center gap-1"
+                      >
+                        ⚡ Spin This Lead ↗
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Optional Custom Topic Bar */}
+          <div className="mt-4 pt-4 border-t border-[#30363d] flex flex-col sm:flex-row items-center gap-3">
+            <span className="text-xs font-mono text-slate-400 whitespace-nowrap">
+              Custom Lead Order (Optional):
+            </span>
+            <input
+              type="text"
+              value={customTopic}
+              onChange={(e) => setCustomTopic(e.target.value)}
+              placeholder="e.g. Vice City underground drift racing circuits or Port Gellhorn crane accidents..."
+              className="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded text-xs text-white font-mono placeholder:text-slate-600 focus:border-[#38bdf8] focus:outline-none"
+            />
+            {customTopic.trim() && (
+              <button
+                type="button"
+                onClick={() => handleSpinUpArticle()}
+                disabled={isSpinningUp}
+                className="px-4 py-2 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition-colors whitespace-nowrap"
+              >
+                ⚡ Spin Custom Lead
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ────────────────────────────────────────────────────────────────────────
+            3. LIVE 4-AGENT TANDEM CONSENSUS STAGE
+        ──────────────────────────────────────────────────────────────────────── */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-5 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#30363d]">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🤝</span>
+              <div>
+                <h2 className="text-sm md:text-base font-bold text-white font-serif uppercase tracking-wide">
+                  Live 4-Agent Consensus Chamber
+                </h2>
+                <p className="text-[11px] font-mono text-slate-400">
+                  Real-time tandem collaboration stream. All 4 specialized agents converse and execute their SOPs in sequence.
+                </p>
+              </div>
+            </div>
+
+            {/* Stepper Indicator */}
+            <div className="flex items-center gap-2">
+              {[
+                { num: 1, label: "Wire Recon" },
+                { num: 2, label: "IP Screen" },
+                { num: 3, label: "Lore Polish" },
+                { num: 4, label: "Asset & Store" },
+              ].map((s) => {
+                const isCurrent = activeStep === s.num;
+                const isPassed = activeStep > s.num;
+                return (
+                  <div
+                    key={s.num}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono transition-colors ${
+                      isCurrent
+                        ? "bg-[#38bdf8] text-black font-bold animate-pulse"
+                        : isPassed
+                        ? "bg-emerald-950/80 text-emerald-400 border border-emerald-600/40"
+                        : "bg-[#0d1117] text-slate-400 border border-[#30363d]"
+                    }`}
+                  >
+                    <span>{isPassed ? "✓" : s.num}</span>
+                    <span className="hidden sm:inline">{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4 Agent Profile Badges */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 py-4 border-b border-[#30363d]">
+            {AGENTS.map((agent) => (
+              <div
+                key={agent.id}
+                className="bg-[#0d1117] border border-[#30363d] p-2.5 rounded flex items-center gap-2.5"
+              >
+                <span className="text-2xl p-1 rounded bg-[#161b22]">{agent.avatar}</span>
+                <div className="min-w-0">
+                  <div className="font-bold text-xs text-white truncate">{agent.name}</div>
+                  <div className="text-[10px] font-mono text-slate-400 truncate">{agent.role}</div>
+                  <span className="inline-block mt-0.5 text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#21262d] text-slate-300">
+                    {agent.codename}
                   </span>
                 </div>
-                <p className="font-semibold text-white text-sm">{boardDraftResult.title}</p>
-                <div className="flex items-center gap-3 text-[#8c887e] font-mono text-[11px]">
-                  <span>Slug: {boardDraftResult.slug}</span>
-                  <span>Category: {boardDraftResult.category}</span>
-                  <span>Blocks: {boardDraftResult.body?.length || 0}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Real-time Dialogue Feed */}
+          <div className="mt-4 space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
+            {dialogues.map((dlg, idx) => {
+              const agentProfile = AGENTS.find((a) => a.id === dlg.agentId) || AGENTS[2];
+              return (
+                <div
+                  key={idx}
+                  className="bg-[#0d1117] border border-[#30363d] rounded-lg p-4 flex items-start gap-3.5 shadow-sm"
+                >
+                  <span className="text-2xl p-1.5 rounded-full bg-[#161b22] border border-[#30363d] shrink-0">
+                    {dlg.avatar}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-white">{dlg.name}</span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${agentProfile.badgeColor}`}>
+                          {dlg.stage}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">{dlg.timestamp}</span>
+                    </div>
+                    <p className="text-xs text-slate-200 leading-relaxed font-sans">{dlg.message}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Collapsible Execution Audit Log */}
+          {auditLogs.length > 0 && (
+            <details className="mt-4 pt-3 border-t border-[#30363d] group">
+              <summary className="text-[11px] font-mono text-slate-400 cursor-pointer hover:text-slate-200 select-none flex items-center gap-1.5">
+                <span>▸ View Real-time Groq LPU Execution Audit Logs ({auditLogs.length} events)</span>
+              </summary>
+              <div className="mt-2.5 p-3 rounded bg-black/70 border border-[#30363d] font-mono text-[11px] text-emerald-400 space-y-1 max-h-48 overflow-y-auto">
+                {auditLogs.map((log, i) => (
+                  <div key={i} className="leading-snug">{log}</div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+
+        {/* ────────────────────────────────────────────────────────────────────────
+            4. FINISHED BROADSHEET ARTICLE SHOWCASE (1-CLICK PUBLISH LIVE)
+        ──────────────────────────────────────────────────────────────────────── */}
+        <div ref={showcaseRef} className="space-y-4">
+          {currentArticle ? (
+            <div className="bg-[#fdfbf7] text-[#111827] rounded-lg border-2 border-black p-6 md:p-10 shadow-2xl">
+              {/* Showcase Command Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b-2 border-black">
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 rounded text-xs font-mono font-black uppercase tracking-wider ${
+                    currentArticle.status === "published"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-amber-500 text-black"
+                  }`}>
+                    {currentArticle.status === "published" ? "🟢 Published Live" : "🟡 Ready Editorial Draft"}
+                  </span>
+                  <span className="text-xs font-mono text-slate-600 font-bold">
+                    Slug: <code className="bg-slate-200 px-1.5 py-0.5 rounded text-black font-mono">{currentArticle.slug}</code>
+                  </span>
                 </div>
 
-                <div className="pt-2 flex flex-wrap items-center gap-2">
-                  {boardDraftResult.status === "draft" && (
+                {/* Direct Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {currentArticle.status === "draft" && (
                     <button
                       type="button"
-                      onClick={() => handleQuickPublishFromModal(boardDraftResult)}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 font-bold uppercase font-mono cursor-pointer flex items-center gap-1.5 shadow-sm text-xs"
+                      disabled={isPublishingDraft}
+                      onClick={handleApproveAndPublishLive}
+                      className="px-5 py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-bold text-xs uppercase tracking-wider transition-colors shadow-md flex items-center gap-2"
                     >
-                      <span>✓ 1-Click Approve & Publish Live Now</span>
+                      {isPublishingDraft ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Publishing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🚀 Approve & Publish Live Now</span>
+                        </>
+                      )}
                     </button>
                   )}
-                  {boardDraftResult.status === "published" && (
+
+                  {currentArticle.status === "published" && (
                     <a
-                      href={`/article/${boardDraftResult.slug}`}
+                      href={`/article/${currentArticle.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 font-bold uppercase font-mono cursor-pointer flex items-center gap-1.5 shadow-sm text-xs"
+                      className="px-5 py-2.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-mono font-bold text-xs uppercase tracking-wider transition-colors shadow-md flex items-center gap-1.5"
                     >
-                      <span>View Live on Front Page ↗</span>
+                      <span>🌐 View Live on Front Page ↗</span>
                     </a>
                   )}
+
                   {onLoadDraftIntoComposer && (
                     <button
                       type="button"
                       onClick={() => {
-                        setShowBoardModal(false);
-                        onLoadDraftIntoComposer(
-                          boardDraftResult.title,
-                          boardDraftResult.body
-                            ?.map((b: any) => b.text || "")
-                            .join("\n\n") || ""
-                        );
+                        const rawText = currentArticle.body
+                          .map((b) => (b.type === "p" ? b.text : b.type === "h2" ? `## ${b.text}` : ""))
+                          .join("\n\n");
+                        onLoadDraftIntoComposer(currentArticle.title, rawText);
                       }}
-                      className="text-[#8c887e] hover:text-white px-2 py-1.5 font-mono text-xs underline cursor-pointer"
+                      className="px-3.5 py-2 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-mono text-xs font-bold transition-colors"
                     >
-                      <span>Edit in Composer (Optional) &rarr;</span>
+                      📝 Edit in Composer (Optional)
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleSpinUpArticle()}
+                    disabled={isSpinningUp}
+                    className="px-3.5 py-2 rounded bg-black hover:bg-slate-800 text-white font-mono text-xs font-bold transition-colors"
+                  >
+                    ⚡ Spin Up Next
+                  </button>
                 </div>
               </div>
-            )}
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#242834]">
-              <button
-                type="button"
-                onClick={() => setShowBoardModal(false)}
-                className="text-[#8c887e] hover:text-white px-4 py-2 font-mono text-xs uppercase"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleRunConsensusBoard}
-                disabled={boardRunning || !boardTopic.trim()}
-                className="bg-[#831843] hover:bg-[#9f1239] disabled:bg-[#323c4e] text-white px-5 py-2 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-colors"
-              >
-                {boardRunning ? "Running Consensus Board..." : "⚡ Execute Consensus Draft"}
-              </button>
+              {/* Broadsheet Headline & Byline */}
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono font-black text-[#831843] uppercase tracking-widest">
+                    {currentArticle.kicker || "VERIFIED INVESTIGATIVE DISPATCH"}
+                  </span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-[11px] font-mono uppercase bg-slate-200 px-2 py-0.5 rounded text-slate-700 font-bold">
+                    {currentArticle.category}
+                  </span>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif font-black text-black leading-tight">
+                  {currentArticle.title}
+                </h1>
+
+                <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-slate-600 pt-1 border-t border-slate-300">
+                  <span className="font-bold text-black">
+                    By Vincent 'Chief' Vance (Senior Managing Editor)
+                  </span>
+                  <span>•</span>
+                  <span>{currentArticle.date}</span>
+                  <span>•</span>
+                  <span>{currentArticle.readMins} Min Read</span>
+                  <span>•</span>
+                  <span className="text-emerald-700 font-bold">✓ 100% Broadsheet Certified</span>
+                </div>
+              </div>
+
+              {/* Verified Hero Image */}
+              {currentArticle.image && (
+                <div className="mb-8 rounded overflow-hidden border border-slate-300 bg-black">
+                  <img
+                    src={currentArticle.image}
+                    alt={currentArticle.title}
+                    className="w-full max-h-[460px] object-cover"
+                  />
+                  <div className="p-2.5 bg-[#f3efe6] text-[11px] font-mono text-slate-600 border-t border-slate-300 flex items-center justify-between">
+                    <span>Forensic surveillance asset verified by Sentinel-9 Media Watchdog.</span>
+                    <span className="uppercase font-bold text-slate-500">State of Leonida Public Records</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Executive Summary Takeaways Box */}
+              {currentArticle.excerpt && (
+                <div className="bg-[#f3efe6] border-l-4 border-[#831843] p-4 mb-8 rounded-r">
+                  <div className="font-mono font-bold text-xs uppercase tracking-wider text-[#831843] mb-1">
+                    ⚡ Executive Intelligence Takeaways
+                  </div>
+                  <p className="text-sm font-serif italic text-slate-800 leading-relaxed">
+                    "{currentArticle.excerpt}"
+                  </p>
+                </div>
+              )}
+
+              {/* Formatted Broadsheet Body Blocks */}
+              <div className="prose max-w-none font-serif text-[#1f2937] text-base leading-relaxed space-y-5">
+                {currentArticle.body && currentArticle.body.length > 0 ? (
+                  currentArticle.body.map((block: Block, bIdx: number) => {
+                    if (block.type === "h2") {
+                      return (
+                        <h2
+                          key={bIdx}
+                          className="text-xl md:text-2xl font-serif font-bold text-black mt-8 pt-4 border-t border-slate-300"
+                        >
+                          {block.text}
+                        </h2>
+                      );
+                    }
+                    if (block.type === "p") {
+                      return (
+                        <p key={bIdx} className="leading-relaxed text-justify text-slate-800">
+                          {block.text}
+                        </p>
+                      );
+                    }
+                    if (block.type === "table") {
+                      return (
+                        <div key={bIdx} className="my-6 overflow-x-auto rounded border border-slate-300">
+                          <table className="min-w-full text-xs font-mono">
+                            <thead className="bg-[#1e293b] text-white">
+                              <tr>
+                                {block.head.map((h, hIdx) => (
+                                  <th key={hIdx} className="px-4 py-2.5 text-left uppercase tracking-wider font-bold">
+                                    {h}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 bg-white">
+                              {block.rows.map((row, rIdx) => (
+                                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                                  {row.map((cell, cIdx) => (
+                                    <td key={cIdx} className="px-4 py-2 text-slate-800">
+                                      {cell}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    }
+                    if (block.type === "quote") {
+                      return (
+                        <blockquote
+                          key={bIdx}
+                          className="my-6 border-l-4 border-black pl-4 italic text-slate-800 bg-[#f3efe6]/50 p-3"
+                        >
+                          "{block.text}"
+                          {block.cite && (
+                            <cite className="block text-xs font-mono font-bold mt-1 text-slate-600 not-italic">
+                              — {block.cite}
+                            </cite>
+                          )}
+                        </blockquote>
+                      );
+                    }
+                    if (block.type === "list") {
+                      return (
+                        <ul key={bIdx} className="list-disc pl-5 my-4 space-y-1.5 text-slate-800 font-sans text-sm">
+                          {block.items.map((item, iIdx) => (
+                            <li key={iIdx}>{item}</li>
+                          ))}
+                        </ul>
+                      );
+                    }
+                    return null;
+                  })
+                ) : (
+                  <p className="italic text-slate-500 font-sans text-sm">Dispatch text is formatting...</p>
+                )}
+              </div>
+
+              {/* Bottom Publishing Confirmation Banner */}
+              <div className="mt-10 pt-6 border-t-2 border-black flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-xs font-mono text-slate-600">
+                  <span>Author: Vincent 'Chief' Vance • Verified Canon Database Record</span>
+                </div>
+                {currentArticle.status === "published" ? (
+                  <a
+                    href={`/article/${currentArticle.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-6 py-3 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg flex items-center gap-2"
+                  >
+                    <span>✓ Published Live — View on Front Page ↗</span>
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isPublishingDraft}
+                    onClick={handleApproveAndPublishLive}
+                    className="px-6 py-3 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg flex items-center gap-2"
+                  >
+                    <span>🚀 1-Click Approve & Publish Live</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-10 text-center space-y-3">
+              <span className="text-4xl block">📰</span>
+              <h3 className="text-base font-bold text-white font-serif uppercase">
+                Consensus Broadsheet Showcase Standing By
+              </h3>
+              <p className="text-xs font-mono text-slate-400 max-w-md mx-auto">
+                Click <strong className="text-[#38bdf8]">"⚡ Spin Up New Article"</strong> above to witness all 4 agents generate, screen, elevate, and format a live investigative broadsheet feature.
+              </p>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* ────────────────────────────────────────────────────────────────────────
+            5. RECENT AUTONOMOUS DISPATCHES DRAWER (IN THE SAME ROOM)
+        ──────────────────────────────────────────────────────────────────────── */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🗄️</span>
+              <h3 className="text-xs font-mono uppercase tracking-wider text-slate-200 font-bold">
+                Recent Autonomous Dispatches & Draft Queue
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={fetchRecentArticles}
+              disabled={loadingRecent}
+              className="text-[11px] font-mono text-[#38bdf8] hover:underline"
+            >
+              {loadingRecent ? "Refreshing..." : "↻ Refresh List"}
+            </button>
+          </div>
+
+          {recentArticles.length === 0 ? (
+            <div className="text-xs font-mono text-slate-500 py-4 text-center">
+              No recent dispatches recorded yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead>
+                  <tr className="border-b border-[#30363d] text-slate-400 text-[10px] uppercase">
+                    <th className="py-2.5 px-3">Headline</th>
+                    <th className="py-2.5 px-3">Category</th>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#30363d]">
+                  {recentArticles.map((art) => (
+                    <tr key={art.slug} className="hover:bg-[#1f2937]/50 transition-colors">
+                      <td className="py-2.5 px-3 font-serif font-bold text-white max-w-xs truncate">
+                        {art.title}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-400 uppercase text-[10px]">
+                        {art.category}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                        {art.date}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            art.status === "published"
+                              ? "bg-emerald-950 text-emerald-400 border border-emerald-700/50"
+                              : "bg-amber-950 text-amber-400 border border-amber-700/50"
+                          }`}
+                        >
+                          {art.status || "published"}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right space-x-2">
+                        {art.status === "draft" && (
+                          <button
+                            type="button"
+                            onClick={() => handleQuickPublishRecentDraft(art)}
+                            className="text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-2 py-1 rounded"
+                          >
+                            ✓ 1-Click Publish
+                          </button>
+                        )}
+                        <a
+                          href={`/article/${art.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] bg-[#21262d] hover:bg-slate-700 text-[#38bdf8] font-bold px-2 py-1 rounded inline-block"
+                        >
+                          View Live ↗
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

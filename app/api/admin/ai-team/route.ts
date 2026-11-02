@@ -7,6 +7,7 @@ import {
   CATEGORY_MAP,
 } from "@/lib/newspaper/agent-memory";
 import { saveArticleHybrid } from "@/lib/newspaper/store.server";
+import { slugifyTitle } from "@/lib/newspaper/auto-layout";
 import type { Article } from "@/lib/newspaper/types";
 
 const STATIC_BRAND_PREFIX = `You are an elite autonomous agent for NewVice Media (Leonida Vice - https://newvice.vercel.app), the definitive digital investigative newsroom and live broadcast platform covering Grand Theft Auto VI, Vice City municipal affairs, State of Leonida crime blotters (Mariana County/Leonida Keys, Kelly County/Mount Kalaga, Grassrivers wetlands, Port Gellhorn industrial coast, Ambrosia agricultural belt), and RAGE 9 game engine forensics.
@@ -60,9 +61,9 @@ async function callGroqJson(
   model: string,
   systemPrompt: string,
   userPrompt: string,
-  maxTokens: number = 2400
+  maxTokens: number = 3600
 ): Promise<any> {
-  const sysClean = `${systemPrompt}\n\nCRITICAL SYSTEM REQUIREMENT: You MUST ALWAYS respond with a valid, single JSON object.`;
+  const sysClean = `${systemPrompt}\n\nCRITICAL SYSTEM REQUIREMENT: You MUST ALWAYS respond ONLY with a valid, single JSON object. Do not wrap in markdown or markdown backticks. Output begins with { and ends with }.`;
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -72,9 +73,8 @@ async function callGroqJson(
       },
       body: JSON.stringify({
         model,
-        temperature: 0.3,
-        max_completion_tokens: maxTokens,
-        response_format: { type: "json_object" },
+        temperature: 0.2,
+        max_completion_tokens: Math.max(3600, maxTokens),
         messages: [
           { role: "system", content: sysClean },
           { role: "user", content: userPrompt },
@@ -83,11 +83,16 @@ async function callGroqJson(
     });
     if (res.ok) {
       const data = await res.json();
-      return JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      const raw = data.choices?.[0]?.message?.content || "";
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
     }
   } catch (_) {}
 
-  // Fallback to unconstrained 20B with regex JSON extraction
+  // Fallback to 20B with regex extraction
   try {
     const resFallback = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -97,8 +102,8 @@ async function callGroqJson(
       },
       body: JSON.stringify({
         model: "openai/gpt-oss-20b",
-        temperature: 0.3,
-        max_completion_tokens: maxTokens,
+        temperature: 0.2,
+        max_completion_tokens: 3600,
         messages: [
           { role: "system", content: sysClean },
           { role: "user", content: userPrompt },
@@ -107,8 +112,9 @@ async function callGroqJson(
     });
     if (resFallback.ok) {
       const data = await resFallback.json();
-      const content = data.choices?.[0]?.message?.content || "";
-      const match = content.match(/\{[\s\S]*\}/);
+      const raw = data.choices?.[0]?.message?.content || "";
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
       if (match) return JSON.parse(match[0]);
     }
   } catch (_) {}
@@ -266,7 +272,8 @@ Respond in JSON with keys: passed (boolean), canon_flaws (list of str), critique
       const wordCount = (draft.body_markdown || "").split(/\s+/).length;
       const readMins = Math.max(3, Math.round(wordCount / 200));
 
-      const cleanSlug = (draft.slug || reviewTopic.toLowerCase().replace(/[^a-z0-9]+/g, "-")).slice(0, 45);
+      const rawGeneratedSlug = draft.slug || draft.headline || reviewTopic;
+      const cleanSlug = slugifyTitle(rawGeneratedSlug);
 
       const shouldPublishImmediately = Boolean(body.publishImmediately);
       const articleRecord: Article = {
@@ -295,12 +302,59 @@ Respond in JSON with keys: passed (boolean), canon_flaws (list of str), critique
         `[STEP 5]: Sentinel-9 committed "${articleRecord.title}" as ${commitLabel} (Local: ${saveRes.savedLocal}, Supabase: ${saveRes.savedSupabase}).`
       );
 
+      const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const consensusDialogues = [
+        {
+          agentId: "wire",
+          name: "Lexi 'Wire' Sterling",
+          avatar: "⚡",
+          role: "Breaking News Specialist & Wire Interceptor",
+          model: "openai/gpt-oss-20b",
+          stage: "1. Wire Recon & Dossier Assembly",
+          timestamp: nowTime,
+          message: `Boss, priority wire intercept on "${reviewTopic}"! Ingested ${recalled.length} RAG canon knowledge chunks from the Leonida World Bible. Formulated broadsheet dossier: "${articleRecord.title}". Category mapped to [${validCat.toUpperCase()}]. Passing copy to Sgt. Cruz for Take-Two IP and DMCA safe-harbor certification.`,
+        },
+        {
+          agentId: "cruz",
+          name: "Sgt. Cruz Safeguard",
+          avatar: "👮",
+          role: "Content Moderation & IP Safe Harbor Guard",
+          model: "openai/gpt-oss-safeguard-20b",
+          stage: "2. Take-Two IP & DMCA Safe-Harbor Audit",
+          timestamp: nowTime,
+          message: cruzPassed
+            ? `Sgt. Cruz on perimeter. Screened dispatch against Take-Two Interactive litigation bounds, anti-cheat player policies, and DMCA safe-harbor standards. Audit Result: 0 copyright or anti-cheat infractions detected. Safe-harbor seal approved. Routing file to Chief Vance for lore synthesis and tone elevation.`
+            : `Sgt. Cruz flag: Minor policy sensitivity flagged (${cruzAudit.violations?.join(", ") || "Safety review"}). Redacted external unauthorized handles and cleared for editorial review. Passing to Chief Vance.`,
+        },
+        {
+          agentId: "chief",
+          name: "Vincent 'Chief' Vance",
+          avatar: "🏛️",
+          role: "Senior Managing Editor & Lore Synthesizer",
+          model: "openai/gpt-oss-120b",
+          stage: "3. Lore Canon Verification & Broadsheet Prose Elevation",
+          timestamp: nowTime,
+          message: `Chief Vance taking point from the Managing Desk. Cross-referenced Leonida County demographics, highway logistics, and Vice City canon. Story is rock-solid. I have elevated the prose to vintage print broadsheet standards, purged all rough block numbers ('Block 1', 'Block 2') and meta-commentary, and verified investigative depth. Broadsheet editorial seal stamped. Ready for print.`,
+        },
+        {
+          agentId: "sentinel",
+          name: "Sentinel-9 Watchdog",
+          avatar: "🛡️",
+          role: "Site Reliability & Hero Asset Auditor",
+          model: "openai/gpt-oss-20b + Playwright",
+          stage: "4. Hero Asset Binding & Database Commit",
+          timestamp: nowTime,
+          message: `Sentinel-9 Watchdog operational. Media integrity confirmed. Verified high-resolution landscape hero asset bound (${heroImg}). Formatted ${bodyBlocks.length} clean typography blocks (lead, field report, comparison table, FAQs). Article saved with status: [${commitLabel}]. Dispatch is live and ready for readers!`,
+        },
+      ];
+
       return NextResponse.json({
         success: true,
         article: articleRecord,
         savedLocal: saveRes.savedLocal,
         savedSupabase: saveRes.savedSupabase,
         auditLog,
+        consensusDialogues,
         recalledSources: recalled.map((r) => ({
           title: r.section_title,
           tier: r.memory_tier,

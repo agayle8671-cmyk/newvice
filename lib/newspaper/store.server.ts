@@ -266,7 +266,14 @@ export const getArticleBySlugServer = cache(async function getArticleBySlugServe
   slug: string
 ): Promise<Article | undefined> {
   const published = await getPublishedArticlesServer();
-  return published.find((a) => a.slug === slug);
+  const found = published.find((a) => a.slug === slug);
+  if (found) return found;
+
+  // Cache-miss fallback: force fresh lookup in case article was just published
+  const fresh = await getAdminArticlesWithHealth(true);
+  return fresh.articles.find(
+    (a) => a.slug === slug && (a.status ?? "published") === "published"
+  );
 });
 
 /** Upsert a custom article (or customized override of a built-in article) to BOTH local JSON and Supabase */

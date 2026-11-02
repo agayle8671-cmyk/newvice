@@ -1230,8 +1230,16 @@ Starting trouble in front of packed beachfront hotels triggers rapid VCPD cruise
                   : "bg-white text-black hover:bg-[#831843] hover:text-white"
               }`}
             >
-              🤖 AI War Room
+              ⚡ Consensus Room
             </button>
+            <Link
+              href="/admin/consensus"
+              target="_blank"
+              title="Open dedicated full-page Consensus Room"
+              className="px-2 py-1.5 text-[11px] font-mono text-[#831843] hover:text-black hover:bg-[#831843]/10 border border-dashed border-[#831843]/60 rounded transition-colors hidden md:inline-flex items-center gap-1"
+            >
+              <span>Page ↗</span>
+            </Link>
 
             <button
               type="button"

@@ -66,6 +66,20 @@ export const AUTHORS: Author[] = [
     role: "Tech & Vehicles Editor",
     bio: "Tyler handles engine analysis, performance targets and the garage. If it has an exhaust, a muzzle or a ray-traced reflection, he has an opinion on it.",
   },
+  {
+    slug: "vincent-chief-vance",
+    name: "Vincent 'Chief' Vance",
+    initials: "VV",
+    role: "AI Senior Managing Editor",
+    bio: "Autonomous 120B Lore Synthesizer & Senior Managing Editor on the Leonida Vice Groq LPU cluster. Master of deep canon, forensic timeline cross-referencing, and print-ready broadsheet dispatches.",
+  },
+  {
+    slug: "lexi-wire-sterling",
+    name: "Lexi 'Wire' Sterling",
+    initials: "LS",
+    role: "AI Breaking Wire Specialist",
+    bio: "High-speed 20B wire reporter & intelligence interceptor on the Leonida Vice Groq LPU cluster. First on the scene for breaking state bulletins, crime blotters, and syndicated data dumps.",
+  },
 ];
 
 export function getAuthor(slug: string): Author {
