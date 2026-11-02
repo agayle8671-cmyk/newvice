@@ -30,6 +30,7 @@ import type {
 } from "@/lib/newspaper/types";
 import { CategoryPipe, CutoutCard } from "./ArticleWidgets";
 import AdminBroadcastQueueTab from "./AdminBroadcastQueueTab";
+import AdminAiTeamTab from "./AdminAiTeamTab";
 import { getSavedForensicFrames } from "@/lib/video/xray-telemetry";
 
 interface StorageHealth {
@@ -91,7 +92,7 @@ export default function AdminNewsroomView() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // ── Studio Workspace State ──
-  const [studioTab, setStudioTab] = useState<"compose" | "desk" | "broadcast" | "cloud">("compose");
+  const [studioTab, setStudioTab] = useState<"compose" | "desk" | "broadcast" | "cloud" | "ai-team">("compose");
   const [broadcastClipCount, setBroadcastClipCount] = useState<number | null>(null);
   const [previewMode, setPreviewMode] = useState<"article" | "card">("article");
   const [editorMode, setEditorMode] = useState<"auto" | "blocks">("auto");
@@ -1186,6 +1187,17 @@ Starting trouble in front of packed beachfront hotels triggers rapid VCPD cruise
               }`}
             >
               ☁️ Cloud Sync
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudioTab("ai-team")}
+              className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider border border-black cursor-pointer transition-colors np-ui ${
+                studioTab === "ai-team"
+                  ? "bg-[#831843] text-white border-[#831843]"
+                  : "bg-white text-black hover:bg-[#831843] hover:text-white"
+              }`}
+            >
+              🤖 AI War Room
             </button>
 
             <button
@@ -2728,6 +2740,21 @@ Starting trouble in front of packed beachfront hotels triggers rapid VCPD cruise
             </div>
           </div>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          TAB 5: AI EDITORIAL TEAM WAR ROOM (GROQ LPU)
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {studioTab === "ai-team" && (
+        <AdminAiTeamTab
+          authHeaders={authHeaders}
+          onLoadDraftIntoComposer={(draftTitle, bodyMarkdown) => {
+            setTitle(draftTitle);
+            setRawText(bodyMarkdown);
+            setEditorMode("auto");
+            setStudioTab("compose");
+          }}
+        />
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
