@@ -56,6 +56,12 @@ const AGENTS: Agent[] = [
   },
 ];
 
+interface MemorySource {
+  title: string;
+  tier: string;
+  sourceFile: string;
+}
+
 interface ChatMessage {
   id: string;
   sender: "user" | "agent";
@@ -63,6 +69,7 @@ interface ChatMessage {
   text: string;
   timestamp: string;
   modelUsed?: string;
+  sources?: MemorySource[];
 }
 
 interface AdminAiTeamTabProps {
@@ -80,17 +87,31 @@ export default function AdminAiTeamTab({
       id: "init-1",
       sender: "agent",
       agentId: "chief",
-      text: "Boss, Vincent Vance reporting in from the Managing Desk. The Groq LPU cluster is primed. Give me a topic, and I'll draft an investigative piece, or ask Lexi for rapid breaking news. What are our orders?",
+      text: "Boss, Vincent Vance reporting in from the Managing Desk. The Groq LPU cluster and Ultimate RAG Knowledge Base are primed. Transmit an order to any agent, or launch the 4-Agent Consensus Review Board below to draft and audit investigative dispatches directly into Draft storage.",
       timestamp: "Just now",
       modelUsed: "openai/gpt-oss-120b",
+      sources: [
+        {
+          title: "SOP-01: Vincent 'Chief' Vance Investigative Feature & GEO Protocol",
+          tier: "procedural_sop",
+          sourceFile: "LEONIDA_VICE_AI_TEAM_SYSTEM_MANUAL.txt",
+        },
+      ],
     },
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [groqKey, setGroqKey] = useState<string>("");
   const [showKeyConfig, setShowKeyConfig] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Consensus Board Modal State
+  const [showBoardModal, setShowBoardModal] = useState(false);
+  const [boardTopic, setBoardTopic] = useState("");
+  const [boardRunning, setBoardRunning] = useState(false);
+  const [boardLog, setBoardLog] = useState<string[]>([]);
+  const [boardDraftResult, setBoardDraftResult] = useState<any>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeAgent = AGENTS.find((a) => a.id === selectedAgentId) || AGENTS[0];
 
   useEffect(() => {
@@ -115,6 +136,9 @@ export default function AdminAiTeamTab({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // SEND MESSAGE (SSE STREAMING AT ~500 TOK/S)
+  // ──────────────────────────────────────────────────────────────────────────
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isLoading) return;
@@ -143,7 +167,18 @@ export default function AdminAiTeamTab({
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const assistantId = "a-" + Date.now();
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      sender: "agent",
+      agentId: selectedAgentId,
+      text: "",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      modelUsed: activeAgent.model,
+      sources: [],
+    };
+
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
     if (!textToSend) setInputText("");
     setIsLoading(true);
 
@@ -168,46 +203,153 @@ export default function AdminAiTeamTab({
           message: text,
           groqApiKey: groqKey,
           history: historyPayload,
+          stream: true,
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to reach AI Team agent.");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to reach AI Team agent.");
       }
 
-      const agentReply: ChatMessage = {
-        id: "a-" + Date.now(),
-        sender: "agent",
-        agentId: selectedAgentId,
-        text: data.reply || "Standing by.",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        modelUsed: data.agent?.model || activeAgent.model,
-      };
+      const reader = res.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let accumulated = "";
 
-      setMessages((prev) => [...prev, agentReply]);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const jsonStr = trimmed.slice(6);
+
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.type === "sources" && parsed.sources) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId
+                      ? {
+                          ...m,
+                          sources: parsed.sources,
+                          modelUsed: parsed.agent?.model || m.modelUsed,
+                        }
+                      : m
+                  )
+                );
+              } else if (parsed.type === "token" && parsed.token) {
+                accumulated += parsed.token;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId ? { ...m, text: accumulated } : m
+                  )
+                );
+              } else if (parsed.type === "error") {
+                throw new Error(parsed.error);
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (!accumulated) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId && !m.text
+                ? { ...m, text: "Standing by for orders, Boss." }
+                : m
+            )
+          );
+        }
+      }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: "err-" + Date.now(),
-          sender: "agent",
-          agentId: selectedAgentId,
-          text: `⚠️ [Agent Connection Error]: ${errMsg}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                text: `⚠️ [Agent Connection Error]: ${errMsg}`,
+                modelUsed: "Error",
+              }
+            : m
+        )
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // RUN 4-AGENT CONSENSUS REVIEW BOARD (SAVES TO STORE AS 'DRAFT')
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleRunConsensusBoard = async () => {
+    if (!boardTopic.trim() || boardRunning) return;
+    if (!groqKey) {
+      setShowKeyConfig(true);
+      alert("Please enter and save your Groq API key first.");
+      return;
+    }
+
+    setBoardRunning(true);
+    setBoardLog([
+      `[*] Initializing 4-Agent LangGraph Consensus Board on Groq LPU...`,
+      `[*] Assigned Topic: "${boardTopic.trim()}"`,
+      `[*] Recall Scope: Procedural SOPs, HD Canon Lore, Take-Two IP constraints`,
+    ]);
+    setBoardDraftResult(null);
+
+    try {
+      const res = await fetch("/api/admin/ai-team", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-groq-api-key": groqKey,
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          action: "board_draft",
+          topic: boardTopic.trim(),
+          groqApiKey: groqKey,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Consensus board execution failed.");
+
+      setBoardLog(data.auditLog || ["Consensus loop complete."]);
+      setBoardDraftResult(data.article);
+    } catch (err: any) {
+      setBoardLog((prev) => [...prev, `[X] Pipeline Error: ${err.message || String(err)}`]);
+    } finally {
+      setBoardRunning(false);
+    }
+  };
+
   const quickPrompts = [
-    { label: "📰 Draft Lucia & Jason Feature", text: "Chief, draft a 1,400-word investigative article about Lucia and Jason executing a tactical stick-up in Vice Beach using RAGE 9 ocean wave timing." },
-    { label: "⚡ 3 Breaking News Flashes", text: "Lexi, give me 3 ultra-punchy breaking news flashes and social headlines about the latest Grand Theft Auto VI leaks." },
-    { label: "🛡️ Run Site Decoder Check", text: "Sentinel-9, report on current HTML5 video playback health and broadcast queue rotation." },
-    { label: "👮 Check Clip Policy", text: "Sgt. Cruz, what are the primary red flags to reject when screening user submissions in SubmitClipModal?" },
+    {
+      label: "📰 Draft Lucia & Jason Feature",
+      text: "Chief, draft a 1,400-word investigative article about Lucia and Jason executing a tactical stick-up in Vice Beach using RAGE 9 ocean wave timing.",
+    },
+    {
+      label: "⚡ 3 Breaking News Flashes",
+      text: "Lexi, give me 3 ultra-punchy breaking news flashes and social headlines about the latest Grand Theft Auto VI leaks.",
+    },
+    {
+      label: "🛡️ Run Site Decoder Check",
+      text: "Sentinel-9, report on current HTML5 video playback health and broadcast queue rotation.",
+    },
+    {
+      label: "👮 Check Clip Policy",
+      text: "Sgt. Cruz, what are the primary red flags to reject when screening user submissions in SubmitClipModal?",
+    },
   ];
 
   return (
@@ -223,6 +365,9 @@ export default function AdminAiTeamTab({
             <span className="bg-[#0f766e] text-white text-[11px] font-mono px-2 py-0.5 uppercase tracking-wider font-bold">
               Groq LPU Connected
             </span>
+            <span className="bg-[#831843] text-white text-[11px] font-mono px-2 py-0.5 uppercase tracking-wider font-bold">
+              Ultimate RAG (57 Chunks)
+            </span>
           </div>
           <p className="text-xs text-[#8c887e] mt-1">
             Direct prompt communication channel with your 4-agent Groq Language Processing Unit team.
@@ -230,6 +375,14 @@ export default function AdminAiTeamTab({
         </div>
 
         <div className="flex items-center gap-3 text-xs font-mono">
+          <button
+            type="button"
+            onClick={() => setShowBoardModal(true)}
+            className="bg-[#831843] hover:bg-[#9f1239] text-white px-3.5 py-1.5 border border-[#9f1239] font-bold uppercase cursor-pointer flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <span>🏛️</span>
+            <span>Launch Consensus Board</span>
+          </button>
           <div className="bg-[#1e222b] px-3 py-1.5 border border-[#242834]">
             <span className="text-[#8c887e]">Throughput:</span>{" "}
             <span className="text-[#14b8a6] font-bold">~500 tok/s</span>
@@ -336,6 +489,9 @@ export default function AdminAiTeamTab({
                 <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 ${activeAgent.badgeColor}`}>
                   {activeAgent.model}
                 </span>
+                <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.5 font-bold">
+                  ⚡ SSE Streaming Active
+                </span>
               </div>
               <p className="text-xs text-[#737373]">{activeAgent.role}</p>
             </div>
@@ -380,8 +536,31 @@ export default function AdminAiTeamTab({
                       : "bg-white text-[#121212] border border-black/15 shadow-sm font-sans"
                   }`}
                 >
-                  {m.text}
+                  {m.text || (
+                    <span className="inline-flex items-center gap-1.5 text-neutral-400 font-mono text-xs">
+                      <span className="animate-spin inline-block h-3 w-3 border-2 border-[#831843] border-t-transparent rounded-full"></span>
+                      Streaming tokens from Groq LPU...
+                    </span>
+                  )}
                 </div>
+
+                {/* Recalled Memory Source Badges */}
+                {!isUser && m.sources && m.sources.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 max-w-[85%]">
+                    <span className="text-[10px] font-mono text-[#737373] font-bold">
+                      📚 Knowledge Base Recall:
+                    </span>
+                    {m.sources.map((src, sIdx) => (
+                      <span
+                        key={sIdx}
+                        title={`Source File: ${src.sourceFile}`}
+                        className="text-[10px] font-mono bg-[#f3efe6] text-[#831843] border border-[#831843]/20 px-2 py-0.5 rounded"
+                      >
+                        [{src.tier.toUpperCase()}] {src.title}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* If the message looks like an article draft and composer callback exists */}
                 {!isUser && onLoadDraftIntoComposer && m.text.length > 250 && (
@@ -390,7 +569,7 @@ export default function AdminAiTeamTab({
                       const firstLine = m.text.split("\n")[0].replace(/^#+\s*/, "").slice(0, 60);
                       onLoadDraftIntoComposer(firstLine || "AI Draft", m.text);
                     }}
-                    className="mt-1 text-[11px] text-[#831843] hover:underline font-mono font-bold flex items-center gap-1"
+                    className="mt-1.5 text-[11px] text-[#831843] hover:underline font-mono font-bold flex items-center gap-1"
                   >
                     <span>📝 Load This Draft Into Composer Tab &rarr;</span>
                   </button>
@@ -399,17 +578,6 @@ export default function AdminAiTeamTab({
             );
           })}
 
-          {isLoading && (
-            <div className="flex flex-col items-start">
-              <div className="flex items-center gap-2 mb-1 px-1 text-xs text-[#737373]">
-                <span>{activeAgent.avatar} {activeAgent.name} is thinking on Groq LPU...</span>
-              </div>
-              <div className="bg-white border border-black/15 rounded p-3 text-xs text-[#737373] flex items-center gap-2 font-mono">
-                <span className="animate-spin inline-block h-3.5 w-3.5 border-2 border-[#831843] border-t-transparent rounded-full"></span>
-                <span>Generating high-throughput tokens (~500 tok/sec)...</span>
-              </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -449,10 +617,136 @@ export default function AdminAiTeamTab({
             disabled={isLoading || !inputText.trim()}
             className="bg-[#831843] hover:bg-[#9f1239] disabled:bg-neutral-300 text-white font-bold px-6 py-4 text-xs uppercase tracking-wider font-mono transition-colors"
           >
-            {isLoading ? "Running..." : "Send Order"}
+            {isLoading ? "Streaming..." : "Send Order"}
           </button>
         </div>
       </div>
+
+      {/* ── AUTONOMOUS REVIEW BOARD MODAL ── */}
+      {showBoardModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121212] text-white border border-black border-b-[6px] max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#242834]">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🏛️</span>
+                <div>
+                  <h3 className="font-bold text-base font-mono uppercase tracking-wider">
+                    Autonomous Consensus Review Board
+                  </h3>
+                  <p className="text-xs text-[#8c887e]">
+                    Cyclical 4-Agent Pipeline: Wire (20B) &rarr; Cruz (20B Safeguard) &rarr; Vance (120B) &rarr; Sentinel-9 (Draft Save)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBoardModal(false)}
+                className="text-[#8c887e] hover:text-white font-mono text-sm px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-bold text-[#faf9f6] uppercase mb-1">
+                Story Topic / Investigative Lead:
+              </label>
+              <input
+                type="text"
+                value={boardTopic}
+                onChange={(e) => setBoardTopic(e.target.value)}
+                placeholder="e.g. Ambrosia Sugar Cane Cartel Logistics, Mount Kalaga High Altitude Physics"
+                className="w-full bg-[#1e222b] border border-[#323c4e] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#831843] font-sans"
+                disabled={boardRunning}
+              />
+              <span className="text-[11px] text-[#8c887e] block mt-1">
+                All articles generated by the board are strictly committed with <strong className="text-amber-400">status: 'draft'</strong> for your final review in the Admin Desk.
+              </span>
+            </div>
+
+            {/* Execution Trace Log */}
+            {boardLog.length > 0 && (
+              <div className="bg-black border border-[#242834] p-3 rounded font-mono text-xs max-h-48 overflow-y-auto space-y-1">
+                {boardLog.map((logLine, idx) => (
+                  <div
+                    key={idx}
+                    className={
+                      logLine.includes("Error") || logLine.includes("[X]")
+                        ? "text-red-400"
+                        : logLine.includes("approved") || logLine.includes("committed") || logLine.includes("[OK]")
+                        ? "text-emerald-400"
+                        : "text-[#8c887e]"
+                    }
+                  >
+                    {logLine}
+                  </div>
+                ))}
+                {boardRunning && (
+                  <div className="text-amber-400 flex items-center gap-2 pt-1">
+                    <span className="animate-spin inline-block h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full"></span>
+                    <span>4-Agent consensus loop active on Groq LPUs...</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Draft Result Banner */}
+            {boardDraftResult && (
+              <div className="bg-[#143026] border border-emerald-600 p-4 rounded text-xs text-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-300 font-mono text-sm">
+                    ✓ Article Successfully Saved as DRAFT!
+                  </span>
+                  <span className="bg-amber-500 text-black font-mono font-bold px-2 py-0.5 rounded text-[10px] uppercase">
+                    Status: {boardDraftResult.status}
+                  </span>
+                </div>
+                <p className="font-semibold text-white">{boardDraftResult.title}</p>
+                <div className="flex items-center gap-3 text-[#8c887e] font-mono text-[11px]">
+                  <span>Slug: {boardDraftResult.slug}</span>
+                  <span>Category: {boardDraftResult.category}</span>
+                  <span>Blocks: {boardDraftResult.body?.length || 0}</span>
+                </div>
+                {onLoadDraftIntoComposer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBoardModal(false);
+                      onLoadDraftIntoComposer(
+                        boardDraftResult.title,
+                        boardDraftResult.body
+                          ?.map((b: any) => b.text || "")
+                          .join("\n\n") || ""
+                      );
+                    }}
+                    className="mt-2 bg-[#831843] hover:bg-[#9f1239] text-white px-3 py-1.5 font-bold uppercase font-mono cursor-pointer flex items-center gap-1"
+                  >
+                    <span>📝 Open in Composer Tab &rarr;</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#242834]">
+              <button
+                type="button"
+                onClick={() => setShowBoardModal(false)}
+                className="text-[#8c887e] hover:text-white px-4 py-2 font-mono text-xs uppercase"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleRunConsensusBoard}
+                disabled={boardRunning || !boardTopic.trim()}
+                className="bg-[#831843] hover:bg-[#9f1239] disabled:bg-[#323c4e] text-white px-5 py-2 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                {boardRunning ? "Running Consensus Board..." : "⚡ Execute Consensus Draft"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

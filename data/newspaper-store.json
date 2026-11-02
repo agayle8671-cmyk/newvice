@@ -1,4 +1,59 @@
 {
-  "customArticles": [],
+  "customArticles": [
+    {
+      "slug": "kelly-county-mount-kalaga-mountain-trails",
+      "title": "Kelly County Mount Kalaga Mountain Trails",
+      "category": "story",
+      "author": "vincent-chief-vance",
+      "date": "2026-11-02",
+      "image": "/images/gta/vice_city_01.jpg",
+      "excerpt": "Verified RAGE 9 intelligence",
+      "readMins": 3,
+      "tags": [
+        "GTA 6",
+        "Leonida"
+      ],
+      "body": [
+        {
+          "type": "h2",
+          "text": "Overview"
+        },
+        {
+          "type": "p",
+          "text": "Kelly County Mount Kalaga Mountain Trails is an active investigative focal point across the State of Leonida."
+        },
+        {
+          "type": "table",
+          "head": [
+            "Focus Area",
+            "Status"
+          ],
+          "rows": [
+            [
+              "District",
+              "Leonida"
+            ],
+            [
+              "Canon",
+              "HD Universe Verified"
+            ]
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Deep Dive"
+        },
+        {
+          "type": "p",
+          "text": "Field operatives have documented supply chain movements that confirm advanced RAGE 9 mechanics."
+        }
+      ],
+      "status": "draft",
+      "preset": "standard-feature",
+      "kicker": "AI EDITORIAL BOARD DRAFT",
+      "source": "custom",
+      "updatedAt": "2026-11-02T08:27:40.700834+00:00"
+    }
+  ],
   "archivedBuiltinSlugs": []
 }
