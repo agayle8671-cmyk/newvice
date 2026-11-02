@@ -83,7 +83,8 @@ export default function NewspaperShell({
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("lv_paper_edition");
+      const urlEdition = new URLSearchParams(window.location.search).get("edition");
+      const saved = (urlEdition === "night" || urlEdition === "day") ? urlEdition : localStorage.getItem("lv_paper_edition");
       if (saved === "night" || saved === "day") {
         setEdition(saved);
       }

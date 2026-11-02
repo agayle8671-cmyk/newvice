@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   },
 };
 
-const THEME_INIT_SCRIPT = `try{var e=localStorage.getItem("lv_paper_edition");if(e==="night"||e==="day"){document.documentElement.setAttribute("data-edition",e);}}catch(_){}`;
+const THEME_INIT_SCRIPT = `try{var u=new URLSearchParams(window.location.search).get("edition");var e=(u==="night"||u==="day")?u:localStorage.getItem("lv_paper_edition");if(e==="night"||e==="day"){document.documentElement.setAttribute("data-edition",e);}}catch(_){}`;
 
 export default function RootLayout({
   children,
@@ -71,7 +71,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Inline+Text:wght@700;800;900&family=Big+Shoulders+Text:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Orbitron:wght@400;500;600;700;800;900&family=Roboto+Slab:wght@300;400;500;600&family=Share+Tech+Mono&family=VT323&family=Work+Sans:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Inline+Text:wght@700;800;900&family=Big+Shoulders+Text:wght@700;800;900&family=DM+Mono:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&display=swap"
           rel="stylesheet"
         />
       </head>

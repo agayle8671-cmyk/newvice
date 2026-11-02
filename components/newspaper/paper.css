@@ -1,42 +1,43 @@
-@import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Inline+Text:wght@700;800;900&family=Big+Shoulders+Text:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Roboto+Slab:wght@300;400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap");
-
 /* ════════════════════════════════════════════════════════════════════
    LEONIDA VICE — Dual-Edition Editorial Broadsheet Skin
-   - Day Edition ("day"): Warm Sun-Bleached Miami Newsprint (#F4EFE4)
-   - Night Edition ("night"): Vice City After-Hours Night Wire (#0B0E14)
+   - Day Edition ("day"): Warm Alabaster Newsprint (#FAF9F6)
+   - Night Edition ("night"): Archival Carbon Press Room (#0A0A0A)
+   - Typography: Newsreader (Display Serif) + DM Sans (Body) + DM Mono (Data)
+   - Color: Palette 3 (Archival Carbon, Editorial Burgundy & Coastal Teal)
    ════════════════════════════════════════════════════════════════════ */
 
 .np-root,
 .np-root[data-edition="day"] {
-  --np-bg: #f4efe4;
-  --np-surface: #faf7f0;
-  --np-surface-alt: #ede7d8;
-  --np-band: #e6dfce;
-  --np-ink: #151412;
+  --np-bg: #faf9f6;
+  --np-surface: #ffffff;
+  --np-surface-alt: #f3efe6;
+  --np-band: #e8e2d4;
+  --np-ink: #121212;
   --np-ink-soft: #2c2925;
-  --np-ink-muted: #635e54;
+  --np-ink-muted: #686358;
   --np-rule: #1e1c19;
-  --np-rule-soft: rgba(28, 26, 23, 0.16);
-  --np-red: #d9383a;
-  --np-cyan: #0c7c7b;
-  --np-shadow-hard: #151412;
-  --np-pinstripe-ink: rgba(21, 20, 18, 0.72);
-  --np-announcement-bg: #f7e6e4;
+  --np-rule-soft: rgba(30, 28, 25, 0.16);
+  --np-red: #831843;
+  --np-cyan: #0f766e;
+  --np-shadow-hard: #121212;
+  --np-pinstripe-ink: rgba(18, 18, 18, 0.72);
+  --np-announcement-bg: #fae8ee;
 
   --np-black: var(--np-ink);
   --np-grey: var(--np-band);
   --np-muted: var(--np-ink-soft);
   --np-max: 1400px;
 
-  --f-logo: "Big Shoulders Inline Text", "Big Shoulders Text", Impact, sans-serif;
-  --f-head: "Big Shoulders Text", Impact, sans-serif;
-  --f-slab: "Roboto Slab", Georgia, serif;
-  --f-ui: "Work Sans", Arial, sans-serif;
+  --f-logo: "Big Shoulders Inline Text", "Newsreader", Georgia, serif;
+  --f-head: "Newsreader", "Newsreader-Fallback", Georgia, serif;
+  --f-slab: "DM Sans", "DMSans-Fallback", system-ui, sans-serif;
+  --f-ui: "DM Sans", "DMSans-Fallback", system-ui, sans-serif;
+  --f-mono: "DM Mono", monospace;
 
   background-color: var(--np-bg);
   background-image:
     radial-gradient(1200px 500px at 50% 0%, rgba(255, 252, 244, 0.65), transparent 75%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.026'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
   color: var(--np-ink);
   font-family: var(--f-slab);
   min-height: 100vh;
@@ -46,40 +47,40 @@
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* ── NIGHT WIRE EDITION (Dark Investigative Press Room) ─────────────── */
+/* ── NIGHT WIRE EDITION (Archival Carbon Press Room) ─────────────────── */
 .np-root[data-edition="night"] {
-  --np-bg: #0b0e14;
-  --np-surface: #131822;
-  --np-surface-alt: #1a2130;
-  --np-band: #080a0f;
-  --np-ink: #f3efe6;
-  --np-ink-soft: #d7d2c6;
-  --np-ink-muted: #989284;
-  --np-rule: #2b3344;
-  --np-rule-soft: rgba(243, 239, 230, 0.12);
-  --np-red: #ff4252;
-  --np-cyan: #00f3ff;
-  --np-shadow-hard: #050609;
-  --np-pinstripe-ink: rgba(243, 239, 230, 0.28);
-  --np-announcement-bg: rgba(255, 66, 82, 0.12);
+  --np-bg: #0a0a0a;
+  --np-surface: #16181f;
+  --np-surface-alt: #1e222b;
+  --np-band: #111318;
+  --np-ink: #faf9f6;
+  --np-ink-soft: #d6d3d1;
+  --np-ink-muted: #8c887e;
+  --np-rule: #242834;
+  --np-rule-soft: rgba(250, 249, 246, 0.12);
+  --np-red: #9f1239;
+  --np-cyan: #14b8a6;
+  --np-shadow-hard: #050608;
+  --np-pinstripe-ink: rgba(250, 249, 246, 0.22);
+  --np-announcement-bg: rgba(159, 18, 57, 0.14);
 
   background-color: var(--np-bg);
   background-image:
-    radial-gradient(1100px 460px at 50% 0%, rgba(255, 66, 82, 0.07), rgba(0, 243, 255, 0.035) 45%, transparent 78%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    radial-gradient(1100px 460px at 50% 0%, rgba(159, 18, 57, 0.08), rgba(20, 184, 166, 0.03) 45%, transparent 78%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
   color: var(--np-ink);
-  scrollbar-color: #2b3344 #0b0e14;
+  scrollbar-color: #242834 #0a0a0a;
 }
 
 html:has(.np-root),
 html:has(.np-root) * {
-  scrollbar-color: #2b3344 #e6dfce;
+  scrollbar-color: #242834 #e8e2d4;
 }
 html:has(.np-root) body {
-  background: #f4efe4;
+  background: #faf9f6;
 }
 html:has(.np-root[data-edition="night"]) body {
-  background: #0b0e14;
+  background: #0a0a0a;
 }
 
 .np-root ::selection {
@@ -203,11 +204,22 @@ html:has(.np-root[data-edition="night"]) body {
 .np-head {
   font-family: var(--f-head);
   font-weight: 600;
-  line-height: 1.12;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
   color: var(--np-ink);
 }
-.np-slab { font-family: var(--f-slab); font-weight: 400; }
-.np-ui { font-family: var(--f-ui); }
+.np-slab {
+  font-family: var(--f-slab);
+  font-weight: 400;
+  line-height: 1.6;
+}
+.np-ui {
+  font-family: var(--f-ui);
+}
+.np-mono {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
 .np-red { color: var(--np-red); }
 
 /* hover underline used by tagDiv titles */
@@ -226,8 +238,10 @@ html:has(.np-root[data-edition="night"]) body {
 .np-pipe {
   display: inline-flex;
   align-items: center;
-  font-family: var(--f-head);
-  font-weight: 600;
+  font-family: var(--f-ui);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--np-red);
   line-height: 1;
@@ -246,10 +260,11 @@ html:has(.np-root[data-edition="night"]) body {
 .np-pipe:hover { color: var(--np-ink); }
 
 .np-meta {
-  font-family: var(--f-ui);
+  font-family: var(--f-mono);
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--np-ink-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Signature Overlapping Cut-Out Headline (box-decoration per line) ─ */

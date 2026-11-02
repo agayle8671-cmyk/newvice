@@ -1,5 +1,76 @@
 @import "tailwindcss";
 
+/* ════════════════════════════════════════════════════════════════════
+   Metric-Matched Local Fallbacks (Zero CLS & Line-Wrap Normalization)
+   ════════════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: 'Newsreader-Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 103.50%;
+  ascent-override: 92.40%;
+  descent-override: 24.10%;
+  line-gap-override: 0.00%;
+}
+
+@font-face {
+  font-family: 'DMSans-Fallback';
+  src: local('Arial'), local('Helvetica Neue');
+  size-adjust: 105.64%;
+  ascent-override: 93.80%;
+  descent-override: 23.60%;
+  line-gap-override: 0.00%;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Two-Layer Primitive & Semantic Token Architecture (Palette 3)
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  /* LAYER 1: PRIMITIVE TOKENS (Archival Carbon, Editorial Burgundy & Coastal Teal) */
+  --carbon-950: #0a0a0a;
+  --carbon-900: #121212;
+  --carbon-850: #16181f;
+  --carbon-800: #1e222b;
+  --carbon-700: #242834;
+  --ivory-50:   #faf9f6;
+  --stone-100:  #f3efe6;
+  --stone-200:  #d6d3d1;
+  --ash-500:    #737373;
+  --ash-400:    #8c887e;
+  --burgundy-900: #831843;
+  --crimson-700:  #9f1239;
+  --teal-700:     #0f766e;
+  --teal-400:     #14b8a6;
+
+  /* Typography Stack Tokens */
+  --font-display: 'Newsreader', 'Newsreader-Fallback', Georgia, serif;
+  --font-sans:    'DM Sans', 'DMSans-Fallback', system-ui, -apple-system, sans-serif;
+  --font-mono:    'DM Mono', monospace;
+
+  /* LAYER 2: SEMANTIC TOKENS (Day Paper Baseline) */
+  --color-background:         var(--ivory-50);
+  --color-surface:            #ffffff;
+  --color-surface-elevated:   var(--stone-100);
+  --color-foreground:         var(--carbon-900);
+  --color-muted:              #575b5f;
+  --color-primary:            var(--burgundy-900);
+  --color-primary-foreground: var(--ivory-50);
+  --color-accent:             var(--teal-700);
+  --color-border:             #e2ded5;
+}
+
+.dark, [data-edition="night"] {
+  /* Night Edition Role Inversion (Archival Carbon & Desaturated Crimson) */
+  --color-background:         var(--carbon-950);
+  --color-surface:            var(--carbon-850);
+  --color-surface-elevated:   var(--carbon-800);
+  --color-foreground:         var(--ivory-50);
+  --color-muted:              var(--ash-400);
+  --color-primary:            var(--crimson-700);
+  --color-primary-foreground: var(--ivory-50);
+  --color-accent:             var(--teal-400);
+  --color-border:             var(--carbon-700);
+}
+
 /* ── Global button/input reset: kill all browser-default focus rings & tap highlights ── */
 button, input {
   -webkit-tap-highlight-color: transparent;
@@ -12,46 +83,74 @@ button:focus {
 }
 
 @theme {
-  /* ── Vice City Core Palette ── */
-  --color-vice-pink: #ff007f;
-  --color-vice-cyan: #00f3ff;
-  --color-vice-purple: #2d004d;
-  --color-vice-deep-purple: #1a0033;
-  --color-vice-yellow: #ffdd00;
-  --color-neon-green: #00ff66;
-  --color-vice-orange: #ff6b00;
-  --color-vice-magenta: #ff00ff;
+  /* ── Core Archival Pigments & Accents ── */
+  --color-vice-pink: var(--color-primary);
+  --color-vice-cyan: var(--color-accent);
+  --color-vice-purple: var(--carbon-800);
+  --color-vice-deep-purple: var(--carbon-950);
+  --color-vice-yellow: #d97706;
+  --color-neon-green: #059669;
+  --color-vice-orange: #c2410c;
+  --color-vice-magenta: var(--burgundy-900);
 
-  /* ── Surface Colors ── */
-  --color-surface-dark: #0a0014;
-  --color-surface-card: rgba(13, 0, 26, 0.85);
-  --color-surface-glass: rgba(0, 243, 255, 0.05);
-  --color-surface-input: rgba(45, 0, 77, 0.6);
+  /* ── Surface Colors (Progressive Surface Lightness) ── */
+  --color-surface-dark: var(--color-background);
+  --color-surface-card: var(--color-surface);
+  --color-surface-glass: rgba(250, 249, 246, 0.04);
+  --color-surface-input: var(--color-surface-elevated);
 
-  /* ── Neon Glows (box-shadow values) ── */
-  --shadow-neon-pink: 0 0 10px #ff007f, 0 0 20px #ff007f, 0 0 40px #ff007f;
-  --shadow-neon-cyan: 0 0 10px #00f3ff, 0 0 20px #00f3ff, 0 0 40px #00f3ff;
-  --shadow-neon-yellow: 0 0 10px #ffdd00, 0 0 20px #ffdd00, 0 0 40px #ffdd00;
-  --shadow-crt-glow: inset 0 0 15px rgba(0, 243, 255, 0.3);
-  --shadow-marquee: 0 0 25px rgba(255, 0, 127, 0.5), inset 0 0 15px rgba(0, 0, 0, 0.9);
+  /* ── Structural Shadows (1px borders replace fuzzy drop-shadows) ── */
+  --shadow-neon-pink: 0 0 0 1px var(--color-primary);
+  --shadow-neon-cyan: 0 0 0 1px var(--color-accent);
+  --shadow-neon-yellow: 0 0 0 1px #d97706;
+  --shadow-crt-glow: inset 0 0 12px rgba(15, 118, 110, 0.2);
+  --shadow-marquee: 0 4px 16px rgba(0, 0, 0, 0.4);
 
-  /* ── Typography ── */
-  --font-display: "Orbitron", sans-serif;
-  --font-body: "Share Tech Mono", monospace;
-  --font-chat: "VT323", monospace;
+  /* ── Typography Tokens ── */
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-body: var(--font-sans);
+  --font-chat: var(--font-sans);
 }
 
 /* ── Global Reset & Base ── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-vice-pink) var(--color-vice-deep-purple);
+  scrollbar-color: var(--color-border) var(--color-background);
 }
 
 body {
-  background: var(--color-surface-dark);
-  color: #e0e0e0;
-  font-family: var(--font-body);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+/* ── Enforce Optical Hierarchy (Display Serif for h1/h2 >= 32px) ── */
+h1, .h1, h2, .h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  background-image: none !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+/* Subheadings (< 28px) in Structured Sans to prevent serif clogging */
+h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Route Timestamps, Badges, Prices, and Telemetry to Technical Monospace */
+time, code, pre, .badge, .tag, .price, .meta, [data-numeric] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── CRT Scanline Overlay ── */
@@ -61,14 +160,14 @@ body {
   inset: 0;
   z-index: 50;
   background: linear-gradient(
-      rgba(18, 16, 16, 0) 50%,
-      rgba(0, 0, 0, 0.25) 50%
+      rgba(10, 10, 10, 0) 50%,
+      rgba(0, 0, 0, 0.18) 50%
     ),
     linear-gradient(
       90deg,
-      rgba(255, 0, 0, 0.02),
-      rgba(0, 255, 0, 0.01),
-      rgba(0, 0, 255, 0.02)
+      rgba(131, 24, 67, 0.02),
+      rgba(15, 118, 110, 0.01),
+      rgba(10, 10, 10, 0.02)
     );
   background-size: 100% 3px, 4px 100%;
 }
@@ -87,161 +186,62 @@ body {
   97%        { opacity: 1;    }
 }
 
-/* ── Neon Text Glow ── */
+/* ── Calibrated Editorial Accents ── */
 .neon-text-pink {
-  text-shadow:
-    0 0 5px #fff,
-    0 0 10px #ff007f,
-    0 0 20px #ff007f,
-    0 0 40px #ff007f;
+  color: var(--color-primary);
+  text-shadow: 0 0 12px rgba(131, 24, 67, 0.35);
 }
 
 .neon-text-cyan {
-  text-shadow:
-    0 0 5px #fff,
-    0 0 10px #00f3ff,
-    0 0 20px #00f3ff,
-    0 0 40px #00f3ff;
+  color: var(--color-accent);
+  text-shadow: 0 0 12px rgba(15, 118, 110, 0.35);
 }
 
 .neon-text-yellow {
-  text-shadow:
-    0 0 5px #fff,
-    0 0 10px #ffdd00,
-    0 0 20px #ffdd00;
+  color: #d97706;
 }
 
-/* ── Neon Border Pulse ── */
+/* ── Clean 1px Structural Borders ── */
 .neon-border-pink {
-  border: 2px solid var(--color-vice-pink);
-  box-shadow: var(--shadow-neon-pink);
-  animation: neon-pulse-pink 2s ease-in-out infinite alternate;
-}
-
-@keyframes neon-pulse-pink {
-  from { box-shadow: 0 0 5px #ff007f, 0 0 10px #ff007f, 0 0 20px #ff007f; }
-  to { box-shadow: 0 0 10px #ff007f, 0 0 25px #ff007f, 0 0 50px #ff007f, 0 0 80px #ff007f; }
+  border: 1px solid var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .neon-border-cyan {
-  border: 2px solid var(--color-vice-cyan);
-  box-shadow: var(--shadow-neon-cyan);
-  animation: neon-pulse-cyan 2.5s ease-in-out infinite alternate;
-}
-
-@keyframes neon-pulse-cyan {
-  from { box-shadow: 0 0 5px #00f3ff, 0 0 10px #00f3ff, 0 0 20px #00f3ff; }
-  to { box-shadow: 0 0 10px #00f3ff, 0 0 25px #00f3ff, 0 0 50px #00f3ff, 0 0 80px #00f3ff; }
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 /* ── Glass Panel ── */
 .glass-panel {
   background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 243, 255, 0.15);
 }
 
-/* ── Drive-In Screen Perspective ── */
-.drive-in-stage {
-  perspective: 1200px;
-  transform-style: preserve-3d;
-}
-
-.drive-in-screen-frame {
-  transform: rotateX(2deg) rotateY(0deg) translateZ(10px);
-  box-shadow: var(--shadow-marquee);
-}
-
-/* ── Festoon String Lights ── */
-.festoon-lights {
-  background-image: radial-gradient(circle 3px, var(--color-vice-yellow) 100%, transparent 100%);
-  background-size: 40px 6px;
-  background-repeat: repeat-x;
-  background-position: center;
-  height: 6px;
-  animation: twinkle 3s ease-in-out infinite alternate;
-}
-
-@keyframes twinkle {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; }
-}
-
-/* ── Stars Background ── */
-.stars {
-  background-image:
-    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.8), transparent),
-    radial-gradient(1px 1px at 30% 60%, rgba(255, 255, 255, 0.6), transparent),
-    radial-gradient(1px 1px at 50% 10%, rgba(255, 255, 255, 0.7), transparent),
-    radial-gradient(1px 1px at 70% 40%, rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 90% 80%, rgba(255, 255, 255, 0.9), transparent),
-    radial-gradient(1px 1px at 15% 75%, rgba(255, 255, 255, 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 45% 50%, rgba(255, 255, 255, 0.6), transparent),
-    radial-gradient(1px 1px at 60% 90%, rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 80% 15%, rgba(255, 255, 255, 0.7), transparent),
-    radial-gradient(1.5px 1.5px at 25% 35%, rgba(255, 255, 255, 0.8), transparent);
-  animation: star-twinkle 4s ease-in-out infinite alternate;
-}
-
-@keyframes star-twinkle {
-  0% { opacity: 0.8; }
-  100% { opacity: 1; }
-}
-
-/* ── Sky Gradient — Warmer Vice City sunset feel ── */
-.sky-gradient {
-  background: linear-gradient(
-    180deg,
-    #030012 0%,
-    #08001f 10%,
-    #120035 22%,
-    #1f0050 35%,
-    #2d0060 45%,
-    #3d1070 55%,
-    #4a1878 62%,
-    #3d1070 72%,
-    #2a0855 82%,
-    #1a0040 90%,
-    #0f0025 100%
+/* ── Scanlines Utility ── */
+.scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
   );
 }
 
-/* ── Headlight beam animation ── */
-@keyframes headlight-flicker {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 0.9; }
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
 }
-
-.headlight-beam {
-  animation: headlight-flicker 3s ease-in-out infinite;
+::-webkit-scrollbar-track {
+  background: var(--color-background);
 }
-
-/* ── Screen glow cast on parking lot ── */
-@keyframes screen-glow-pulse {
-  0%, 100% { opacity: 0.15; }
-  50% { opacity: 0.25; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
 }
-
-.screen-glow-cast {
-  animation: screen-glow-pulse 4s ease-in-out infinite;
-}
-
-/* ── Custom Scrollbar for Chat ── */
-.chat-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-.chat-scroll::-webkit-scrollbar-track {
-  background: var(--color-vice-deep-purple);
-}
-.chat-scroll::-webkit-scrollbar-thumb {
-  background: var(--color-vice-pink);
-  border-radius: 3px;
-}
-
-/* ── Selection Color ── */
-::selection {
-  background: var(--color-vice-pink);
-  color: white;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
 }
