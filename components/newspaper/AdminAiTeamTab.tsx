@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { cleanPolishedMarkdown, markdownToBlocks } from "@/lib/newspaper/clean-markdown";
 
 interface Agent {
   id: "chief" | "wire" | "sentinel" | "cruz";
@@ -110,6 +111,16 @@ export default function AdminAiTeamTab({
   const [boardRunning, setBoardRunning] = useState(false);
   const [boardLog, setBoardLog] = useState<string[]>([]);
   const [boardDraftResult, setBoardDraftResult] = useState<any>(null);
+  const [autoPublish, setAutoPublish] = useState(false);
+
+  // Quick 1-Click Publishing State
+  const [quickPublishingId, setQuickPublishingId] = useState<string | null>(null);
+  const [publishedAlert, setPublishedAlert] = useState<{
+    id: string;
+    title: string;
+    slug: string;
+    status: string;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeAgent = AGENTS.find((a) => a.id === selectedAgentId) || AGENTS[0];
@@ -302,6 +313,7 @@ export default function AdminAiTeamTab({
     setBoardLog([
       `[*] Initializing 4-Agent LangGraph Consensus Board on Groq LPU...`,
       `[*] Assigned Topic: "${boardTopic.trim()}"`,
+      `[*] Target Output: ${autoPublish ? "Direct Live Publishing" : "Saved as Draft"}`,
       `[*] Recall Scope: Procedural SOPs, HD Canon Lore, Take-Two IP constraints`,
     ]);
     setBoardDraftResult(null);
@@ -317,6 +329,7 @@ export default function AdminAiTeamTab({
         body: JSON.stringify({
           action: "board_draft",
           topic: boardTopic.trim(),
+          publishImmediately: autoPublish,
           groqApiKey: groqKey,
         }),
       });
@@ -330,6 +343,95 @@ export default function AdminAiTeamTab({
       setBoardLog((prev) => [...prev, `[X] Pipeline Error: ${err.message || String(err)}`]);
     } finally {
       setBoardRunning(false);
+    }
+  };
+
+  // 1-Click Approve Draft from Modal
+  const handleQuickPublishFromModal = async (art: any) => {
+    try {
+      const res = await fetch("/api/admin/articles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          ...art,
+          status: "published",
+        }),
+      });
+      if (res.ok) {
+        setBoardDraftResult((prev: any) => ({ ...prev, status: "published" }));
+        setBoardLog((prev) => [...prev, `[OK] ✓ 1-Click Approved & Published LIVE to Front Page!`]);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setBoardLog((prev) => [...prev, `[X] Publish error: ${d.error || "Failed"}`]);
+      }
+    } catch (err: any) {
+      setBoardLog((prev) => [...prev, `[X] Publish error: ${err.message}`]);
+    }
+  };
+
+  // 1-Click Publish or Save Draft directly from Chatbox Response
+  const handleQuickPublishFromChat = async (
+    msgId: string,
+    rawText: string,
+    targetStatus: "published" | "draft"
+  ) => {
+    setQuickPublishingId(msgId);
+    try {
+      const cleanBody = cleanPolishedMarkdown(rawText);
+      const lines = cleanBody.split("\n").map((l) => l.trim()).filter(Boolean);
+      let cleanTitle = "AI Investigative Dispatch";
+      for (const l of lines) {
+        const t = l.replace(/^#+\s*/, "").replace(/^Headline:\s*/i, "").replace(/^Title:\s*/i, "").trim();
+        if (t.length > 5 && !t.toLowerCase().startsWith("block") && !t.toLowerCase().startsWith("sop")) {
+          cleanTitle = t.slice(0, 60);
+          break;
+        }
+      }
+
+      const cleanSlug = cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 45);
+      const articlePayload = {
+        slug: cleanSlug,
+        title: cleanTitle,
+        category: "story",
+        author: "vincent-chief-vance",
+        date: new Date().toISOString().split("T")[0],
+        image: "/images/gta/vice_city_01.jpg",
+        excerpt: cleanBody.slice(0, 150) + "...",
+        readMins: Math.max(3, Math.round(cleanBody.split(/\s+/).length / 200)),
+        tags: ["GTA 6", "Leonida"],
+        body: markdownToBlocks(cleanBody),
+        status: targetStatus,
+        preset: "standard-feature",
+        kicker: targetStatus === "published" ? "VERIFIED DISPATCH" : "AI EDITORIAL DRAFT",
+      };
+
+      const res = await fetch("/api/admin/articles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify(articlePayload),
+      });
+
+      if (res.ok) {
+        setPublishedAlert({
+          id: msgId,
+          title: cleanTitle,
+          slug: cleanSlug,
+          status: targetStatus,
+        });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(`Error: ${d.error || "Failed to save article"}`);
+      }
+    } catch (err: any) {
+      alert(`Publish error: ${err.message}`);
+    } finally {
+      setQuickPublishingId(null);
     }
   };
 
@@ -562,17 +664,60 @@ export default function AdminAiTeamTab({
                   </div>
                 )}
 
-                {/* If the message looks like an article draft and composer callback exists */}
-                {!isUser && onLoadDraftIntoComposer && m.text.length > 250 && (
-                  <button
-                    onClick={() => {
-                      const firstLine = m.text.split("\n")[0].replace(/^#+\s*/, "").slice(0, 60);
-                      onLoadDraftIntoComposer(firstLine || "AI Draft", m.text);
-                    }}
-                    className="mt-1.5 text-[11px] text-[#831843] hover:underline font-mono font-bold flex items-center gap-1"
-                  >
-                    <span>📝 Load This Draft Into Composer Tab &rarr;</span>
-                  </button>
+                {/* If the message looks like an article draft: 1-Click Publish, 1-Click Save Draft, or Edit */}
+                {!isUser && m.text.length > 250 && (
+                  <div className="mt-2.5 pt-2 border-t border-black/10 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={quickPublishingId === m.id}
+                      onClick={() => handleQuickPublishFromChat(m.id, m.text, "published")}
+                      className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-neutral-400 text-white text-[11px] font-mono font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
+                      title="Instantly publish this article live without editing"
+                    >
+                      <span>🚀 1-Click Publish Live</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={quickPublishingId === m.id}
+                      onClick={() => handleQuickPublishFromChat(m.id, m.text, "draft")}
+                      className="bg-[#1e222b] hover:bg-black disabled:bg-neutral-400 text-[#faf9f6] text-[11px] font-mono font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 border border-black/20 cursor-pointer"
+                      title="Save as a draft in the Admin Desk without editing"
+                    >
+                      <span>💾 Save as Ready Draft</span>
+                    </button>
+                    {onLoadDraftIntoComposer && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const clean = cleanPolishedMarkdown(m.text);
+                          const firstLine = clean.split("\n")[0].replace(/^#+\s*/, "").slice(0, 60);
+                          onLoadDraftIntoComposer(firstLine || "AI Dispatch", clean);
+                        }}
+                        className="text-[11px] text-[#831843] hover:underline font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>📝 Edit in Composer (Optional)</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {publishedAlert && publishedAlert.id === m.id && (
+                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-600 rounded text-xs text-emerald-900 font-mono flex items-center justify-between gap-2 max-w-[85%] shadow-sm">
+                    <span>
+                      ✓ {publishedAlert.status === "published" ? "Published Live to Front Page!" : "Saved to Draft Queue:"}{" "}
+                      <strong>"{publishedAlert.title}"</strong>
+                    </span>
+                    {publishedAlert.status === "published" && (
+                      <a
+                        href={`/article/${publishedAlert.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-emerald-700 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase hover:bg-emerald-800"
+                      >
+                        View Live ↗
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -660,8 +805,33 @@ export default function AdminAiTeamTab({
                 disabled={boardRunning}
               />
               <span className="text-[11px] text-[#8c887e] block mt-1">
-                All articles generated by the board are strictly committed with <strong className="text-amber-400">status: 'draft'</strong> for your final review in the Admin Desk.
+                The 4-agent board will draft, audit Take-Two IP constraints, verify canon lore, and format broadsheet copy.
               </span>
+            </div>
+
+            {/* Publishing Mode Toggle */}
+            <div className="flex items-center justify-between p-3 bg-[#1e222b] border border-[#323c4e] rounded">
+              <div>
+                <span className="text-xs font-mono font-bold text-white block">
+                  Publishing Strategy:
+                </span>
+                <span className="text-[11px] text-[#8c887e]">
+                  {autoPublish
+                    ? "Direct live deployment: Article goes straight to front page after passing Cruz & Vance."
+                    : "Draft mode: Article is audited and saved to desk for your final 1-click approval."}
+                </span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-mono text-xs select-none">
+                <input
+                  type="checkbox"
+                  checked={autoPublish}
+                  onChange={(e) => setAutoPublish(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500 cursor-pointer"
+                />
+                <span className={autoPublish ? "text-emerald-400 font-bold" : "text-[#8c887e]"}>
+                  {autoPublish ? "⚡ Auto-Publish Live" : "Save as Draft"}
+                </span>
+              </label>
             </div>
 
             {/* Execution Trace Log */}
@@ -695,35 +865,65 @@ export default function AdminAiTeamTab({
               <div className="bg-[#143026] border border-emerald-600 p-4 rounded text-xs text-white space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-emerald-300 font-mono text-sm">
-                    ✓ Article Successfully Saved as DRAFT!
+                    {boardDraftResult.status === "published"
+                      ? "✓ Article Successfully Published LIVE to Front Page!"
+                      : "✓ Article Successfully Audited & Saved as DRAFT!"}
                   </span>
-                  <span className="bg-amber-500 text-black font-mono font-bold px-2 py-0.5 rounded text-[10px] uppercase">
+                  <span
+                    className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] uppercase ${
+                      boardDraftResult.status === "published"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-amber-500 text-black"
+                    }`}
+                  >
                     Status: {boardDraftResult.status}
                   </span>
                 </div>
-                <p className="font-semibold text-white">{boardDraftResult.title}</p>
+                <p className="font-semibold text-white text-sm">{boardDraftResult.title}</p>
                 <div className="flex items-center gap-3 text-[#8c887e] font-mono text-[11px]">
                   <span>Slug: {boardDraftResult.slug}</span>
                   <span>Category: {boardDraftResult.category}</span>
                   <span>Blocks: {boardDraftResult.body?.length || 0}</span>
                 </div>
-                {onLoadDraftIntoComposer && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowBoardModal(false);
-                      onLoadDraftIntoComposer(
-                        boardDraftResult.title,
-                        boardDraftResult.body
-                          ?.map((b: any) => b.text || "")
-                          .join("\n\n") || ""
-                      );
-                    }}
-                    className="mt-2 bg-[#831843] hover:bg-[#9f1239] text-white px-3 py-1.5 font-bold uppercase font-mono cursor-pointer flex items-center gap-1"
-                  >
-                    <span>📝 Open in Composer Tab &rarr;</span>
-                  </button>
-                )}
+
+                <div className="pt-2 flex flex-wrap items-center gap-2">
+                  {boardDraftResult.status === "draft" && (
+                    <button
+                      type="button"
+                      onClick={() => handleQuickPublishFromModal(boardDraftResult)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 font-bold uppercase font-mono cursor-pointer flex items-center gap-1.5 shadow-sm text-xs"
+                    >
+                      <span>✓ 1-Click Approve & Publish Live Now</span>
+                    </button>
+                  )}
+                  {boardDraftResult.status === "published" && (
+                    <a
+                      href={`/article/${boardDraftResult.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 font-bold uppercase font-mono cursor-pointer flex items-center gap-1.5 shadow-sm text-xs"
+                    >
+                      <span>View Live on Front Page ↗</span>
+                    </a>
+                  )}
+                  {onLoadDraftIntoComposer && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBoardModal(false);
+                        onLoadDraftIntoComposer(
+                          boardDraftResult.title,
+                          boardDraftResult.body
+                            ?.map((b: any) => b.text || "")
+                            .join("\n\n") || ""
+                        );
+                      }}
+                      className="text-[#8c887e] hover:text-white px-2 py-1.5 font-mono text-xs underline cursor-pointer"
+                    >
+                      <span>Edit in Composer (Optional) &rarr;</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

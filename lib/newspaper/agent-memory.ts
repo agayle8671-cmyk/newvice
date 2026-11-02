@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs";
 import type { Block, CategorySlug } from "./types";
+export { cleanPolishedMarkdown, markdownToBlocks, CATEGORY_MAP } from "./clean-markdown";
 
 export interface KnowledgeMemoryChunk {
   content_hash: string;
@@ -145,92 +146,4 @@ export function recallAgentMemories(
 
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit);
-}
-
-export const CATEGORY_MAP: Record<string, CategorySlug> = {
-  "story & campaign": "story",
-  "story": "story",
-  "map & locations": "leonida",
-  "leonida": "leonida",
-  "vehicles & weapons": "vehicles-weapons",
-  "online & features": "in-game-media",
-  "trailers & media": "trailers-media",
-  "leaks & rumors": "leaks-rumors",
-  "guides & walkthroughs": "story",
-  "tech & rage": "tech-rage",
-};
-
-export function markdownToBlocks(md: string): Block[] {
-  const blocks: Block[] = [];
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    if (!line) {
-      i++;
-      continue;
-    }
-    if (line.startsWith("## ") || line.startsWith("### ")) {
-      blocks.push({ type: "h2", text: line.replace(/^#+\s*/, "") });
-      i++;
-    } else if (line.startsWith("|") && line.indexOf("|", 1) !== -1) {
-      const tableLines = [line];
-      i++;
-      while (i < lines.length && lines[i].trim().startsWith("|")) {
-        tableLines.push(lines[i].trim());
-        i++;
-      }
-      if (tableLines.length >= 2) {
-        const head = tableLines[0].split("|").slice(1, -1).map((c) => c.trim());
-        const rows: string[][] = [];
-        const isSeparator = /^\|?[\s:-|-]+\|?$/.test(tableLines[1]);
-        const startRow = isSeparator ? 2 : 1;
-        for (let r = startRow; r < tableLines.length; r++) {
-          const cells = tableLines[r].split("|").slice(1, -1).map((c) => c.trim());
-          if (cells.some((c) => c.length > 0)) {
-            rows.push(cells);
-          }
-        }
-        blocks.push({ type: "table", head, rows: rows.length > 0 ? rows : [head.map(() => "—")] });
-      }
-    } else if (line.startsWith(">")) {
-      let quoteText = line.replace(/^>\s*/, "");
-      i++;
-      while (i < lines.length && lines[i].trim().startsWith(">")) {
-        quoteText += " " + lines[i].trim().replace(/^>\s*/, "");
-        i++;
-      }
-      blocks.push({ type: "quote", text: quoteText });
-    } else if (line.startsWith("- ") || line.startsWith("* ") || /^\d+\.\s/.test(line)) {
-      const items: string[] = [];
-      while (
-        i < lines.length &&
-        (lines[i].trim().startsWith("- ") ||
-          lines[i].trim().startsWith("* ") ||
-          /^\d+\.\s/.test(lines[i].trim()))
-      ) {
-        items.push(lines[i].trim().replace(/^(-\s+|\*\s+|\d+\.\s+)/, ""));
-        i++;
-      }
-      blocks.push({ type: "list", items });
-    } else {
-      const pLines = [line];
-      i++;
-      while (
-        i < lines.length &&
-        lines[i].trim() &&
-        !lines[i].trim().startsWith("#") &&
-        !lines[i].trim().startsWith("|") &&
-        !lines[i].trim().startsWith(">") &&
-        !lines[i].trim().startsWith("- ") &&
-        !lines[i].trim().startsWith("* ") &&
-        !/^\d+\.\s/.test(lines[i].trim())
-      ) {
-        pLines.push(lines[i].trim());
-        i++;
-      }
-      blocks.push({ type: "p", text: pLines.join(" ") });
-    }
-  }
-  return blocks;
 }

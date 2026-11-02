@@ -211,10 +211,25 @@ CATEGORY_MAP = {
     "tech & rage": "tech-rage",
 }
 
+def clean_polished_markdown(raw: str) -> str:
+    """Removes all internal prompt leaks, meta-labels ('Block 1', 'Block 2'), and critique notes."""
+    if not raw:
+        return ""
+    cleaned = re.sub(r"(?mi)^\[(CHIEF VANCE|SGT\. CRUZ|LEXI WIRE|SENTINEL|NODE|CRITICAL)[^\]]*\][^\n]*\n?", "", raw)
+    cleaned = re.sub(r"(?mi)^CRITICAL FIXES?[^\n]*\n?", "", cleaned)
+    cleaned = re.sub(r"(?mi)^(Note|Internal Note|Canon Check|SOP-\d+)[^:\n]*:[^\n]*\n?", "", cleaned)
+    cleaned = re.sub(r"(?mi)^#{1,4}\s*Block\s*1\s*[:\-–—]?\s*(Answer-First\s*Summary|Overview)?", "## Overview", cleaned)
+    cleaned = re.sub(r"(?mi)^#{1,4}\s*Block\s*2\s*[:\-–—]?\s*(Comparison\s*Table|Verified\s*Attributes|Data\s*Table)?", "## Field Intelligence & Specifications", cleaned)
+    cleaned = re.sub(r"(?mi)^#{1,4}\s*Block\s*3\s*[:\-–—]?\s*(Deep\s*Investigative\s*Narrative|Deep\s*Dive|Investigation)?", "## Investigative Dispatch", cleaned)
+    cleaned = re.sub(r"(?mi)^#{1,4}\s*Block\s*4\s*[:\-–—]?\s*(FAQ\s*Section|Frequently\s*Asked\s*Questions|FAQs)?", "## Frequently Asked Questions", cleaned)
+    cleaned = re.sub(r"(?mi)^Block\s*[1-4]\s*[:\-–—]?\s*", "", cleaned)
+    return cleaned.strip()
+
 def markdown_to_blocks(md: str):
     """Parses markdown text into Leonida Vice Block[] schema (h2, p, table, list, quote)."""
     blocks = []
-    lines = md.replace("\r\n", "\n").split("\n")
+    sanitized = clean_polished_markdown(md)
+    lines = sanitized.replace("\r\n", "\n").split("\n")
     i = 0
     while i < len(lines):
         line = lines[i].strip()
@@ -366,11 +381,12 @@ def node_lexi_wire_drafter(state: NewsroomGraphState) -> dict:
         f"LIVE WEB RECONNAISSANCE INTELLIGENCE:\n{recon_summary}\n\n"
         f"RETRIEVED PERSISTENT MEMORY & PROCEDURAL SOPs:\n{retrieved_context}"
         f"{critique_prompt}\n\n"
-        "Draft a complete, broadsheet-grade article strictly in JSON adhering to SOP-02 and the GEO 4-Block layout:\n"
-        "- Block 1: 2-4 sentence Answer-First Summary for Google AI Overviews\n"
-        "- Block 2: Markdown comparison table of verified attributes\n"
-        "- Block 3: Deep investigative narrative (1,200+ words)\n"
-        "- Block 4: FAQ section with 3 long-tail Q&A pairs\n"
+        "Draft a complete, broadsheet-grade investigative feature strictly in JSON.
+"
+        "CRITICAL EDITORIAL RULE: NEVER output outline markers ('Block 1', 'Block 2', 'Answer-First') or editing notes.
+"
+        "Use natural subheadings (## Overview, ## Field Reconnaissance, ## Key Specifications, ## Frequently Asked Questions).
+"
         "Headline must be <= 60 chars. Output strict JSON matching ArticleDraftSchema."
     )
 
@@ -536,6 +552,7 @@ def node_sentinel_publish_and_remember(state: NewsroomGraphState) -> dict:
         print(f"  [SELF-HEALED] Substituted unverified hero image with: {draft['hero_image_suggestion']}")
 
     # Map category to canonical schema and convert markdown to Block[]
+    draft["body_markdown"] = clean_polished_markdown(draft.get("body_markdown", ""))
     cat_raw = draft.get("category", "Story & Campaign").lower()
     valid_cat = CATEGORY_MAP.get(cat_raw, "story")
     body_blocks = markdown_to_blocks(draft.get("body_markdown", ""))

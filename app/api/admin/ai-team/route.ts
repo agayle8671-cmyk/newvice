@@ -3,13 +3,15 @@ import { verifyAdminRequest } from "@/lib/newspaper/admin-auth";
 import {
   recallAgentMemories,
   markdownToBlocks,
+  cleanPolishedMarkdown,
   CATEGORY_MAP,
 } from "@/lib/newspaper/agent-memory";
 import { saveArticleHybrid } from "@/lib/newspaper/store.server";
 import type { Article } from "@/lib/newspaper/types";
 
 const STATIC_BRAND_PREFIX = `You are an elite autonomous agent for NewVice Media (Leonida Vice - https://newvice.vercel.app), the definitive digital investigative newsroom and live broadcast platform covering Grand Theft Auto VI, Vice City municipal affairs, State of Leonida crime blotters (Mariana County/Leonida Keys, Kelly County/Mount Kalaga, Grassrivers wetlands, Port Gellhorn industrial coast, Ambrosia agricultural belt), and RAGE 9 game engine forensics.
-Immutable Canon Constants: Launch Date is November 19, 2026 on PS5 and Xbox Series X|S. Protagonists are Lucia Caminos (first HD-universe female lead, former Leonida Penitentiary inmate) and Jason Duval (Army veteran working for Keys smuggler Brian Heder). Supporting cast: Cal Hampton, Boobie Ike, Raul Bautista, Dre'Quan Priest, Real Dimez (Bae-Luxe & Roxy), and Stefanie. RAGE 9 targets 30fps at ~1440p upscaled to 4K with Ray-Traced Global Illumination (RTGI), Ray-Traced Reflections, and physical Hair Strand simulation. Always adhere strictly to your retrieved Procedural Memory SOPs.`;
+Immutable Canon Constants: Launch Date is November 19, 2026 on PS5 and Xbox Series X|S. Protagonists are Lucia Caminos (first HD-universe female lead, former Leonida Penitentiary inmate) and Jason Duval (Army veteran working for Keys smuggler Brian Heder). Supporting cast: Cal Hampton, Boobie Ike, Raul Bautista, Dre'Quan Priest, Real Dimez (Bae-Luxe & Roxy), and Stefanie. RAGE 9 targets 30fps at ~1440p upscaled to 4K with Ray-Traced Global Illumination (RTGI), Ray-Traced Reflections, and physical Hair Strand simulation.
+CRITICAL EDITORIAL RULE: You write 100% finished, polished, publication-ready broadsheet journalism. NEVER include internal outline labels like 'Block 1', 'Block 2', 'Answer-First Summary', 'GEO Protocol', 'SOP-01', or meta-commentary notes explaining your writing. Use natural, compelling newspaper subheadings. The article must be 100% ready for print with zero rough notes.`;
 
 const AGENTS: Record<
   string,
@@ -21,19 +23,19 @@ const AGENTS: Record<
     model: "openai/gpt-oss-120b",
     avatar: "🏛️",
     systemPrompt: `You are Vincent 'Chief' Vance, the veteran managing editor of Leonida Vice (NewVice).
-Adhere strictly to SOP-01: Vincent 'Chief' Vance Investigative Feature & GEO Protocol.
+You write authoritative, immersive broadsheet investigative journalism. Address the operator as Boss.
 Maintain rigorous 3D vs. HD universe boundaries (Phil Cassidy retains both arms in HD, Tommy Vercetti is absent).
-Address the operator as Boss or Director. Be authoritative, analytical, and structured.
-When drafting features, employ the GEO 4-Block layout (Answer-First summary, verified markdown table, investigative deep dive, and FAQs).`,
+NEVER output outline markers like 'Block 1', 'Block 2', 'Answer-First', 'SOP-01', or meta-commentary notes.
+When asked to write an article or report, deliver a 100% complete, polished, publish-ready dispatch with natural subheadings, verified data, and zero placeholder text.`,
   },
   wire: {
     name: "Lexi 'Wire' Sterling",
     role: "Breaking News Specialist & Strict CMS Formatter",
     model: "openai/gpt-oss-20b",
     avatar: "⚡",
-    systemPrompt: `You are Lexi 'Wire' Sterling, the ultra-fast breaking news reporter and CMS formatter for Leonida Vice.
-Adhere strictly to SOP-02: Lexi 'Wire' Sterling Breaking News & Ingestion Engine.
-Powered by Groq's 20B LPU, specialize in punchy news flashes, bullet takeaways, social headlines, and formatting content directly for the newsroom desk. Fast, witty, and precise.`,
+    systemPrompt: `You are Lexi 'Wire' Sterling, the ultra-fast breaking news reporter for Leonida Vice.
+Powered by Groq's 20B LPU, deliver punchy, electric news dispatches and bullet breakdowns.
+NEVER include internal outline markers ('Block 1', 'Block 2') or rough editing notes. Deliver finished, pristine copy ready for immediate broadcast.`,
   },
   sentinel: {
     name: "Sentinel-9 Watchdog",
@@ -41,7 +43,6 @@ Powered by Groq's 20B LPU, specialize in punchy news flashes, bullet takeaways, 
     model: "openai/gpt-oss-20b",
     avatar: "🛡️",
     systemPrompt: `You are Sentinel-9, the automated site reliability and quality assurance AI for Leonida Vice.
-Adhere strictly to SOP-03: Sentinel-9 Playwright Synthetic QA & Broken Link Remediation.
 You monitor live HTML5 video decoders (NicoNico, Coub, Streamable, VK, Odyssee, PeerTube), broadcast queue rotation, 404 links, and editorial consistency. Speak in clean, tactical telemetry readouts.`,
   },
   cruz: {
@@ -50,7 +51,6 @@ You monitor live HTML5 video decoders (NicoNico, Coub, Streamable, VK, Odyssee, 
     model: "openai/gpt-oss-safeguard-20b",
     avatar: "👮",
     systemPrompt: `You are Sergeant Cruz, the content moderation and policy guard for Leonida Vice.
-Adhere strictly to SOP-04: Sgt. Cruz Legal, IP, DMCA & Safe Harbor Guardrail Protocol.
 Screen clip metadata from SubmitClipModal.tsx, detect spam, enforce Take-Two IP boundaries (PlayerAuctions, Alexander litigation bounds), review Citizen Wire chat flags, and enforce DMCA Safe Harbor compliance. Direct, firm, and safety-focused.`,
   },
 };
@@ -169,7 +169,18 @@ export async function POST(request: NextRequest) {
       auditLog.push(`[STEP 1]: Recalled ${recalled.length} persistent knowledge chunks for '${reviewTopic}'.`);
 
       // Step 2: Lexi Wire (20b) First Draft
-      const lexiPrompt = `TOPIC: ${reviewTopic}\n\nRETRIEVED KNOWLEDGE BASE & SOPS:\n${memoryText}\n\nDraft a complete broadsheet article adhering to SOP-02 and GEO 4-block layout. Headline <= 60 chars. Output strict JSON with keys: headline, slug, meta_description, category, hero_image_suggestion, takeaway_bullets (array of 3), body_markdown, tags (array).`;
+      const lexiPrompt = `TOPIC: ${reviewTopic}
+
+RETRIEVED KNOWLEDGE BASE:
+${memoryText}
+
+CRITICAL EDITORIAL INSTRUCTION:
+Write a 100% finished, print-ready, broadsheet investigative newspaper feature for Leonida Vice.
+NEVER include outline labels like 'Block 1', 'Block 2', 'Answer-First Summary', 'GEO Protocol', or internal editing notes.
+Use natural, captivating broadsheet subheadings (e.g. '## Executive Summary', '## Field Reconnaissance & Logistics', '## Technical & Syndicate Data', '## Frequently Asked Questions').
+The body text must be deeply written, immersive, and ready to publish immediately.
+Headline strictly <= 60 chars. Output strict JSON with keys: headline, slug, meta_description, category, hero_image_suggestion, takeaway_bullets (array of 3 punchy takeaways), body_markdown, tags (array of 4-6 tags).`;
+
       const draft = await callGroqJson(
         groqApiKey,
         "openai/gpt-oss-20b",
@@ -180,7 +191,12 @@ export async function POST(request: NextRequest) {
       auditLog.push(`[STEP 2]: Lexi Wire (20B) drafted: "${draft.headline || reviewTopic}"`);
 
       // Step 3: Sgt. Cruz (safeguard-20b) IP & DMCA Audit
-      const cruzPrompt = `HEADLINE: ${draft.headline}\nCATEGORY: ${draft.category}\nSNIPPET: ${(draft.body_markdown || "").slice(0, 1200)}\n\nAudit against SOP-04: Take-Two IP litigation bounds, raw hacker video bans, anti-cheat policy, and DMCA safe harbor. Respond in JSON with keys: passed (boolean), violations (list of str), remediation_notes (str).`;
+      const cruzPrompt = `HEADLINE: ${draft.headline}
+CATEGORY: ${draft.category}
+SNIPPET: ${(draft.body_markdown || "").slice(0, 1200)}
+
+Audit against SOP-04: Take-Two IP litigation bounds, raw hacker video bans, anti-cheat policy, and DMCA safe harbor. Respond in JSON with keys: passed (boolean), violations (list of str), remediation_notes (str).`;
+
       const cruzAudit = await callGroqJson(
         groqApiKey,
         "openai/gpt-oss-safeguard-20b",
@@ -196,7 +212,14 @@ export async function POST(request: NextRequest) {
       );
 
       // Step 4: Vincent 'Chief' Vance (120b) Lore Canon Audit
-      const vancePrompt = `HEADLINE: ${draft.headline}\nCATEGORY: ${draft.category}\nSNIPPET: ${(draft.body_markdown || "").slice(0, 1400)}\n\nAudit against SOP-01: 3D vs HD universe rules (Phil Cassidy arms, no Tommy Vercetti), geography accuracy, and GEO layout. Respond in JSON with keys: passed (boolean), canon_flaws (list of str), critique_notes (str), polished_body_markdown (optional str).`;
+      const vancePrompt = `HEADLINE: ${draft.headline}
+CATEGORY: ${draft.category}
+SNIPPET: ${(draft.body_markdown || "").slice(0, 1500)}
+
+Audit this story for canon accuracy and elevate it into finished, print-ready broadsheet copy.
+Ensure all rough meta notes, block numbers ('Block 1', 'Block 2'), and debugging labels are completely removed.
+Respond in JSON with keys: passed (boolean), canon_flaws (list of str), critique_notes (str), polished_body_markdown (str).`;
+
       const vanceReview = await callGroqJson(
         groqApiKey,
         "openai/gpt-oss-120b",
@@ -214,7 +237,10 @@ export async function POST(request: NextRequest) {
           : `[STEP 4]: Chief Vance critique: ${vanceReview.canon_flaws?.join(", ") || "Refined prose"}`
       );
 
-      // Step 5: Sentinel-9 Hero Substitution & Draft Commit
+      // Sanitize body markdown of any remaining rogue outline tags or critique artifacts
+      draft.body_markdown = cleanPolishedMarkdown(draft.body_markdown || "");
+
+      // Step 5: Sentinel-9 Hero Substitution & Commit
       const verifiedHeroes = [
         "/images/gta/jason_duval_07.jpg",
         "/images/gta/jason_lucia_lock_and_load_tablet.jpg",
@@ -242,7 +268,7 @@ export async function POST(request: NextRequest) {
 
       const cleanSlug = (draft.slug || reviewTopic.toLowerCase().replace(/[^a-z0-9]+/g, "-")).slice(0, 45);
 
-      // OPERATOR DIRECTIVE: Save strictly as 'draft' for user approval in Admin Desk
+      const shouldPublishImmediately = Boolean(body.publishImmediately);
       const articleRecord: Article = {
         slug: cleanSlug,
         title: draft.headline || reviewTopic.slice(0, 60),
@@ -257,15 +283,16 @@ export async function POST(request: NextRequest) {
         readMins,
         tags: draft.tags || ["GTA 6", "Leonida"],
         body: bodyBlocks,
-        status: "draft", // Strictly DRAFT for operator review
+        status: shouldPublishImmediately ? "published" : "draft",
         preset: "standard-feature",
-        kicker: "AI EDITORIAL BOARD DRAFT",
+        kicker: shouldPublishImmediately ? "VERIFIED DISPATCH" : "AI EDITORIAL BOARD DRAFT",
         source: "custom",
       };
 
       const saveRes = await saveArticleHybrid(articleRecord);
+      const commitLabel = shouldPublishImmediately ? "PUBLISHED LIVE" : "SAVED AS DRAFT";
       auditLog.push(
-        `[STEP 5]: Sentinel-9 committed draft "${articleRecord.title}" (slug: ${articleRecord.slug}) to store (Local: ${saveRes.savedLocal}, Supabase: ${saveRes.savedSupabase}).`
+        `[STEP 5]: Sentinel-9 committed "${articleRecord.title}" as ${commitLabel} (Local: ${saveRes.savedLocal}, Supabase: ${saveRes.savedSupabase}).`
       );
 
       return NextResponse.json({

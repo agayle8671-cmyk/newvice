@@ -892,6 +892,39 @@ Starting trouble in front of packed beachfront hotels triggers rapid VCPD cruise
     }
   };
 
+  // ── 1-Click Approve & Publish Draft Live ──
+  const handleQuickPublishDraft = async (art: Article) => {
+    try {
+      const res = await fetch("/api/admin/articles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          ...art,
+          status: "published",
+        }),
+      });
+      if (res.ok) {
+        await Promise.all([loadAdminDesk(), refreshLiveArticles(true)]);
+        setBanner({
+          kind: "ok",
+          text: `✓ Published live to Front Page! "${art.title}"`,
+          publishedSlug: art.slug,
+        });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setBanner({ kind: "err", text: data.error || "Could not publish draft." });
+      }
+    } catch (err: unknown) {
+      setBanner({
+        kind: "err",
+        text: err instanceof Error ? err.message : "Could not publish draft.",
+      });
+    }
+  };
+
   // ── Passcode Login Submit ──
   const handlePasscodeLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2604,6 +2637,16 @@ Starting trouble in front of packed beachfront hotels triggers rapid VCPD cruise
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {st === "draft" && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickPublishDraft(art)}
+                          className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase transition-colors cursor-pointer np-ui flex items-center gap-1 shadow-sm"
+                          title="Instantly publish this draft live to the front page without editing"
+                        >
+                          ✓ 1-Click Publish
+                        </button>
+                      )}
                       {st === "published" && (
                         <Link
                           href={articleHref(art)}
