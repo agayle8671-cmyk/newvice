@@ -87,9 +87,29 @@ export default function AdminAiTeamTab({
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [groqKey, setGroqKey] = useState<string>("");
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeAgent = AGENTS.find((a) => a.id === selectedAgentId) || AGENTS[0];
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("lv_groq_api_key");
+      if (saved) {
+        setGroqKey(saved);
+      } else {
+        setShowKeyConfig(true);
+      }
+    } catch (_) {}
+  }, []);
+
+  const saveCustomKey = (newKey: string) => {
+    setGroqKey(newKey);
+    try {
+      localStorage.setItem("lv_groq_api_key", newKey);
+    } catch (_) {}
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,6 +118,22 @@ export default function AdminAiTeamTab({
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isLoading) return;
+
+    if (!groqKey) {
+      setShowKeyConfig(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: "err-" + Date.now(),
+          sender: "agent",
+          agentId: selectedAgentId,
+          text: "⚠️ Groq API key is required. Paste your Groq API key in the '⚡ Groq API Key' bar above and click 'Connect & Save' to transmit orders to the editorial desk.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          modelUsed: "System Notice",
+        },
+      ]);
+      return;
+    }
 
     const userMsg: ChatMessage = {
       id: "u-" + Date.now(),
@@ -124,11 +160,13 @@ export default function AdminAiTeamTab({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-groq-api-key": groqKey,
           ...authHeaders(),
         },
         body: JSON.stringify({
           agentId: selectedAgentId,
           message: text,
+          groqApiKey: groqKey,
           history: historyPayload,
         }),
       });
@@ -200,8 +238,38 @@ export default function AdminAiTeamTab({
             <span className="text-[#8c887e]">Prompt Caching:</span>{" "}
             <span className="text-[#14b8a6] font-bold">50% Active</span>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowKeyConfig(!showKeyConfig)}
+            className="bg-[#1e222b] hover:bg-[#242834] text-[#faf9f6] px-3 py-1.5 border border-[#242834] cursor-pointer"
+          >
+            ⚙️ Key: {groqKey ? `${groqKey.slice(0, 7)}...` : "Configure"}
+          </button>
         </div>
       </div>
+
+      {showKeyConfig && (
+        <div className="bg-[#16181f] text-white p-4 border border-[#0f766e] flex flex-wrap items-center gap-3 text-xs font-mono shadow-md">
+          <span className="text-[#14b8a6] font-bold">⚡ Groq API Key:</span>
+          <input
+            type="password"
+            value={groqKey}
+            onChange={(e) => saveCustomKey(e.target.value)}
+            placeholder="Paste your Groq API key (gsk_...) here"
+            className="flex-1 min-w-[280px] bg-black border border-[#323c4e] px-3 py-1.5 text-white focus:outline-none focus:border-[#14b8a6]"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKeyConfig(false)}
+            className="bg-[#0f766e] hover:bg-[#14b8a6] text-white px-4 py-1.5 font-bold uppercase transition-colors cursor-pointer"
+          >
+            ✓ Connect & Save
+          </button>
+          <span className="text-[11px] text-[#8c887e] w-full">
+            Key is securely stored in your browser storage for this session and sent directly to the Groq LPU cluster.
+          </span>
+        </div>
+      )}
 
       {/* ── 4 AGENT VISUAL ROSTER CARDS ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

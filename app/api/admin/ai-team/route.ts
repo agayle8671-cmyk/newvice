@@ -44,17 +44,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const groqApiKey = process.env.GROQ_API_KEY;
-  if (!groqApiKey) {
-    return NextResponse.json(
-      { error: "GROQ_API_KEY is not configured on the server." },
-      { status: 500 }
-    );
-  }
-
   try {
     const body = await request.json();
     const { agentId = "chief", message = "", history = [] } = body;
+
+    const groqApiKey =
+      process.env.GROQ_API_KEY ||
+      request.headers.get("x-groq-api-key") ||
+      body.groqApiKey;
+
+    if (!groqApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Groq API Key not found. Please click '⚙️ Key' in the top-right of the AI War Room to enter your Groq API key.",
+        },
+        { status: 400 }
+      );
+    }
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
