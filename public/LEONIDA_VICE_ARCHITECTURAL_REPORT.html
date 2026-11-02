@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LEONIDA VICE — Complete System Architecture &amp; AI Handoff Report (v4.0)</title>
+  <style>
+    :root {
+      --bg: #F4EFE4;
+      --surface: #FAF7F0;
+      --surface-alt: #EFE9DA;
+      --ink: #111111;
+      --ink-muted: #4A463E;
+      --ink-faint: #787266;
+      --border: #111111;
+      --border-soft: rgba(17, 17, 17, 0.2);
+      --accent: #E04040;
+      --accent-dark: #B92B2B;
+      --cyan: #007799;
+      --emerald: #0D8A52;
+      --amber: #B86B00;
+      --code-bg: #161922;
+      --code-ink: #E8ECF4;
+      --shadow: 4px 4px 0px #111111;
+    }
+
+    html[data-theme="night"] {
+      --bg: #0B0E14;
+      --surface: #131822;
+      --surface-alt: #1A2130;
+      --ink: #EDE8DC;
+      --ink-muted: #B6B1A4;
+      --ink-faint: #7F8796;
+      --border: #323C4E;
+      --border-soft: rgba(237, 232, 220, 0.14);
+      --accent: #FF4747;
+      --accent-dark: #E04040;
+      --cyan: #00F3FF;
+      --emerald: #10B981;
+      --amber: #F59E0B;
+      --code-bg: #07090D;
+      --code-ink: #E8ECF4;
+      --shadow: 4px 4px 0px #000000;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      font-size: 14.5px;
+      transition: background 0.18s ease, color 0.18s ease;
+    }
+
+    code, pre, .mono {
+      font-family: "JetBrains Mono", "Fira Code", Consolas, "Courier New", monospace;
+    }
+
+    /* Top Broadsheet Utility Masthead */
+    .masthead {
+      border-bottom: 4px double var(--border);
+      background: var(--surface);
+      padding: 18px 28px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .masthead-inner {
+      max-width: 1480px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand-block {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      font-weight: 900;
+      font-size: 26px;
+      letter-spacing: -0.03em;
+      text-transform: uppercase;
+      border: 2px solid var(--border);
+      padding: 2px 10px;
+      background: var(--ink);
+      color: var(--surface);
+    }
+
+    .brand-logo span {
+      color: var(--accent);
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+    }
+
+    .brand-sub strong {
+      color: var(--accent);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 2px solid var(--border);
+      background: var(--surface);
+      color: var(--ink);
+      font-weight: 800;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 7px 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 2px 2px 0 var(--border);
+    }
+
+    .btn:hover {
+      background: var(--ink);
+      color: var(--surface);
+    }
+
+    .btn-accent {
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--border);
+    }
+
+    .btn-accent:hover {
+      background: var(--ink);
+      color: #FFFFFF;
+    }
+
+    .btn-emerald {
+      background: var(--emerald);
+      color: #FFFFFF;
+    }
+
+    .search-input {
+      border: 2px solid var(--border);
+      background: var(--bg);
+      color: var(--ink);
+      padding: 6px 12px;
+      font-size: 12.5px;
+      font-weight: 600;
+      width: 240px;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Layout Shell */
+    .shell {
+      max-width: 1480px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 28px;
+      padding: 28px;
+    }
+
+    @media (max-width: 1024px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static !important;
+      }
+    }
+
+    /* Sticky Table of Contents Sidebar */
+    .sidebar {
+      position: sticky;
+      top: 94px;
+      align-self: start;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+    }
+
+    .sidebar-title {
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      border-bottom: 2px solid var(--border);
+      color: var(--accent);
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc-list a {
+      display: block;
+      text-decoration: none;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 8px;
+      border-left: 3px solid transparent;
+      transition: all 0.12s ease;
+    }
+
+    .toc-list a:hover {
+      background: var(--surface-alt);
+      border-left-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .meta-kv {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-soft);
+      font-size: 11.5px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .meta-kv div {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    /* Main Content Cards */
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      min-width: 0;
+    }
+
+    .section-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 26px 30px;
+    }
+
+    .section-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+      border-bottom: 3px solid var(--border);
+    }
+
+    .section-num {
+      background: var(--accent);
+      color: #FFFFFF;
+      font-weight: 900;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      padding: 3px 8px;
+      text-transform: uppercase;
+      margin-right: 10px;
+    }
+
+    .section-title {
+      font-size: 21px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -0.01em;
+    }
+
+    .section-tag {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-faint);
+    }
+
+    h3 {
+      font-size: 15.5px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin: 20px 0 10px;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h3::before {
+      content: "■";
+      color: var(--accent);
+      font-size: 11px;
+    }
+
+    p {
+      margin-bottom: 12px;
+      color: var(--ink);
+    }
+
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 14px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    /* Grid Helpers */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin: 14px 0;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 14px 0;
+    }
+
+    . grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 14px 0;
+    }
+
+    .subcard {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      padding: 16px;
+    }
+
+    .subcard-title {
+      font-weight: 900;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+
+    /* Badges & Pills */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+    }
+
+    .badge-live {
+      background: var(--emerald);
+      color: #FFFFFF;
+      border-color: #065F46;
+    }
+
+    .badge-crimson {
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: #7F1D1D;
+    }
+
+    .badge-cyan {
+      background: var(--cyan);
+      color: #FFFFFF;
+      border-color: #004455;
+    }
+
+    .badge-amber {
+      background: var(--amber);
+      color: #FFFFFF;
+      border-color: #78350F;
+    }
+
+    /* Tables */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 12px 0 18px;
+      border: 2px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: var(--surface);
+    }
+
+    th {
+      background: var(--ink);
+      color: var(--surface);
+      text-align: left;
+      font-weight: 900;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-soft);
+      vertical-align: top;
+    }
+
+    tr:hover td {
+      background: var(--surface-alt);
+    }
+
+    /* Code & Pre Blocks */
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 16px 18px;
+      border: 2px solid var(--border);
+      overflow-x: auto;
+      font-size: 12.2px;
+      line-height: 1.55;
+      margin: 12px 0;
+    }
+
+    code {
+      background: var(--surface-alt);
+      padding: 1px 5px;
+      border: 1px solid var(--border-soft);
+      font-size: 12.2px;
+      font-weight: 600;
+    }
+
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* Architecture Diagram Boxes */
+    .arch-diagram {
+      background: var(--code-bg);
+      color: #E8ECF4;
+      border: 2px solid var(--border);
+      padding: 22px;
+      margin: 14px 0;
+    }
+
+    .arch-layer {
+      border: 1px dashed rgba(255, 255, 255, 0.28);
+      padding: 14px;
+      margin-bottom: 14px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .arch-layer-title {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #00F3FF;
+      margin-bottom: 10px;
+    }
+
+    .arch-nodes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .arch-node {
+      background: #141923;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-left: 4px solid #E04040;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+
+    .arch-node strong {
+      display: block;
+      color: #FFFFFF;
+      font-family: monospace;
+      margin-bottom: 3px;
+    }
+
+    .arch-node span {
+      color: #A6B0C3;
+      font-size: 11.5px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--emerald);
+      color: #FFFFFF;
+      border: 2px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 12px 18px;
+      font-weight: 800;
+      font-size: 12.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      z-index: 999;
+      display: none;
+    }
+
+    @media print {
+      .masthead, .sidebar, .no-print {
+        display: none !important;
+      }
+      .shell {
+        display: block;
+        padding: 0;
+      }
+      .section-card {
+        box-shadow: none;
+        break-inside: avoid;
+        margin-bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       STICKY MASTHEAD & AI HANDOFF TOOLBAR
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand-block">
+        <div class="brand-logo">LEONIDA <span>VICE</span></div>
+        <div>
+          <div class="brand-sub"><strong>SYSTEM ARCHITECTURE &amp; AI HANDOFF SPECIFICATION</strong> • VERSION 4.0 (PRODUCTION RELEASE)</div>
+          <div style="font-size: 11.5px; color: var(--ink-faint);">
+            Next.js 16.4 App Router • React 19.3 • TypeScript 5 • Tailwind v4 • Newsreader + DM Sans (CLS=0.00) • Supabase Cloud • Groq LPU AI Team • Playwright Watchdog
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar no-print">
+        <input
+          id="globalSearch"
+          type="search"
+          class="search-input"
+          placeholder="Filter files, routes, tables..."
+          oninput="filterReport(this.value)"
+        />
+        <button class="btn btn-accent" onclick="copyAiPrompt()">
+          📋 COPY FULL AI HANDOFF PROMPT (v4.0)
+        </button>
+        <button class="btn" onclick="copyJsonManifest()">
+          { } COPY JSON MANIFEST
+        </button>
+        <button class="btn" id="themeBtn" onclick="toggleTheme()">
+          🌙 NIGHT WIRE
+        </button>
+        <button class="btn" onclick="window.print()">
+          🖨️ PRINT / PDF
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="copyToast" class="toast">✓ COPIED TO CLIPBOARD — READY TO PASTE INTO ANY AI!</div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       MAIN 2-COLUMN ARCHITECTURAL SHELL
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <div class="shell">
+    <!-- LEFT NAVIGATION SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-title">Architectural Index</div>
+      <ul class="toc-list">
+        <li><a href="#sec-1">01. Executive Summary &amp; Identity</a></li>
+        <li><a href="#sec-2">02. System Topology &amp; Data Flow</a></li>
+        <li><a href="#sec-3">03. Complete Capability Matrix</a></li>
+        <li><a href="#sec-4">04. Dual-Edition Broadsheet &amp; Typography</a></li>
+        <li><a href="#sec-5">05. Synchronized Broadcast Engine &amp; Auto-Advance</a></li>
+        <li><a href="#sec-6">06. 3-Stage Forensic Video Stack</a></li>
+        <li><a href="#sec-7">07. Window Event Bus Protocol</a></li>
+        <li><a href="#sec-8">08. Newsroom Admin Studio &amp; Supabase Cloud</a></li>
+        <li><a href="#sec-9">09. 20-Source Video &amp; Photo Scraper</a></li>
+        <li><a href="#sec-10">10. Complete API Route Reference (14 Endpoints)</a></li>
+        <li><a href="#sec-11">11. Database Schema &amp; Cloud Persistence</a></li>
+        <li><a href="#sec-12">12. Groq LPU AI Team &amp; Playwright Watchdog</a></li>
+        <li><a href="#sec-13">13. Exhaustive File &amp; Module Map</a></li>
+        <li><a href="#sec-14">14. Env Vars &amp; Operations Runbook</a></li>
+        <li><a href="#sec-15">15. Master AI Handoff Prompt (v4.0)</a></li>
+      </ul>
+
+      <div class="meta-kv">
+        <div><span>Version:</span> <span class="mono" style="color:var(--accent);font-weight:700;">4.0.0 (Release)</span></div>
+        <div><span>Live URL:</span> <a href="https://newvice.vercel.app" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700;">newvice.vercel.app</a></div>
+        <div><span>Git Repo:</span> <span class="mono">agayle8671-cmyk/newvice</span></div>
+        <div><span>App Root:</span> <span class="mono">leonida-vice/</span></div>
+        <div><span>Framework:</span> <span class="mono">Next.js 16.4.3</span></div>
+        <div><span>React:</span> <span class="mono">19.3.0</span></div>
+        <div><span>Typography:</span> <span class="mono">Newsreader + DM Sans</span></div>
+        <div><span>Color System:</span> <span class="mono">Palette 3 (Archival)</span></div>
+        <div><span>Database:</span> <span class="mono">Supabase PostgreSQL</span></div>
+        <div><span>AI Engine:</span> <span class="mono">Groq LPU (120B / 20B)</span></div>
+        <div><span>Watchdog:</span> <span class="mono">Playwright + SQLite</span></div>
+      </div>
+    </aside>
+
+    <!-- RIGHT CONTENT STREAM -->
+    <main class="main" id="reportMain">
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 01: EXECUTIVE SUMMARY & SYSTEM IDENTITY
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-1">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 01</span>
+            <span class="section-title">Executive Summary &amp; System Identity</span>
+          </div>
+          <span class="section-tag">High-Level Overview for AI &amp; Engineers</span>
+        </div>
+
+        <p>
+          <strong>Leonida Vice</strong> (<a href="https://newvice.vercel.app" target="_blank" rel="noopener">https://newvice.vercel.app</a>) is a hybrid <strong>GTA VI Investigative Broadsheet Magazine &amp; 24/7 Synchronized Communal Broadcast Platform</strong>. It fuses the editorial typography and multi-column newspaper density of the <em>tagDiv Urban Observer PRO</em> broadsheet with a sub-50ms room-synchronized communal video theater, a frame-accurate 800% Forensic Loupe &amp; Storyboard Exporter, a bi-directional X-Ray Telemetry &amp; 6-County Leonida Radar deck, real-time Citizen Wire chat, and a full-featured Newsroom Admin Studio (<code>/admin</code>).
+        </p>
+
+        <div class="grid-3">
+          <div class="subcard">
+            <div class="subcard-title">1. Editorial Broadsheet Engine</div>
+            <p>10 GTA VI categories, 52+ structured investigative articles, 3 staff personas, 4 editorial layout presets, auto-layout placement without code edits, and a 1-click <strong>☀️ DAY PAPER / 🌙 NIGHT WIRE</strong> dual-edition theme system.</p>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">2. Communal Live Broadcast</div>
+            <p>Every viewer on the site watches the exact same GTA VI trailer, leak analysis, or community clip at the exact same second via a Dual-DOM <code>&lt;video&gt;</code> pre-buffer engine (<code>&lt;16ms</code> cut) and deterministic server clock / Cloudflare PartyServer coordinator.</p>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">3. 3-Stage Forensic Video Stack</div>
+            <p>Includes an 800% zoom Canvas Forensic Loupe with <code>-1f/+1f</code> stepping and 6-Frame Contact Sheet PNG export, a native <code>VTTCue</code> X-Ray Telemetry &amp; 6-County Radar Map, and a detachable OS Document Picture-in-Picture Command Center.</p>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 14px;">
+          <div class="subcard" style="border-left: 4px solid var(--accent);">
+            <div class="subcard-title">4. Human-Authored Typography &amp; Archival Pigments (Palette 3)</div>
+            <p>Full 3-tier optical hierarchy: <strong>Newsreader</strong> (optical headline serif <code>opsz 6..72</code>, <code>-0.015em</code> tracking), <strong>DM Sans</strong> (low-contrast body workhorse <code>opsz 9..40</code>), and <strong>DM Mono</strong> (tabular timecodes/telemetry). Backed by metric-matched <code>@font-face</code> overrides for Georgia (<code>size-adjust: 103.50%</code>) and Arial (<code>size-adjust: 105.64%</code>) guaranteeing <strong>CLS = 0.00</strong>. Built on Archival Carbon (<code>#0A0A0A</code>), Alabaster (<code>#FAF9F6</code>), Editorial Burgundy (<code>#831843</code> / <code>#9F1239</code>), and Coastal Teal (<code>#0F766E</code> / <code>#14B8A6</code>).</p>
+          </div>
+          <div class="subcard" style="border-left: 4px solid var(--cyan);">
+            <div class="subcard-title">5. Multi-Model Groq LPU AI Team &amp; Playwright Watchdog</div>
+            <p>Autonomous editorial and QA pipeline powered by Groq's Language Processing Unit cloud at <strong>$0.59 to $0.83 / month</strong>. Routes long-form deep lore articles to <code>openai/gpt-oss-120b</code>, short briefs to <code>openai/gpt-oss-20b</code> with <strong>Strict JSON Mode (<code>strict: true</code>)</strong>, and leverages 50% Prompt Caching. Continuously verified by a headless Playwright Chromium watchdog testing real HTML5 media decoders (<code>readyState = 4</code>), queue advance, 404 assets, and LLM text QA into SQLite.</p>
+          </div>
+        </div>
+
+        <h3>Core Technology Stack</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Technology / Package</th>
+                <th>Version</th>
+                <th>Architectural Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Web Framework</strong></td>
+                <td><code>next</code> (App Router + Turbopack)</td>
+                <td><code>16.4.3</code></td>
+                <td>SSR/ISR pages, 14 REST/Streaming API routes, dynamic client bundles, RouteProgressBar, Vercel Cron triggers</td>
+              </tr>
+              <tr>
+                <td><strong>UI Runtime</strong></td>
+                <td><code>react</code> / <code>react-dom</code> / <code>framer-motion</code></td>
+                <td><code>19.3.0</code></td>
+                <td>Concurrent rendering, <code>createPortal</code> modals &amp; OS Document PiP portals, instant page navigation</td>
+              </tr>
+              <tr>
+                <td><strong>Typographic System</strong></td>
+                <td><code>Newsreader</code> + <code>DM Sans</code> + <code>DM Mono</code></td>
+                <td><code>Variable opsz</code></td>
+                <td>Human-authored 3-tier hierarchy: Newsreader (display headlines), DM Sans (body), DM Mono (tabular telemetry); zero CLS metric fallbacks</td>
+              </tr>
+              <tr>
+                <td><strong>Color System</strong></td>
+                <td>Palette 3: Archival Carbon &amp; Burgundy</td>
+                <td><code>CSS Tokens</code></td>
+                <td>Alabaster (<code>#FAF9F6</code>), Carbon (<code>#0A0A0A</code>), Burgundy (<code>#831843</code>), Crimson (<code>#9F1239</code>), Teal (<code>#0F766E</code>/<code>#14B8A6</code>); 1px crisp structural bounds</td>
+              </tr>
+              <tr>
+                <td><strong>AI Editorial Engine</strong></td>
+                <td><code>groq</code> SDK + Pydantic</td>
+                <td><code>v1.4.0</code></td>
+                <td>Multi-model routing: <code>openai/gpt-oss-120b</code> (long SEO) &amp; <code>openai/gpt-oss-20b</code> (Strict JSON CMS payloads); 50% prompt caching discount</td>
+              </tr>
+              <tr>
+                <td><strong>Site Reliability Watchdog</strong></td>
+                <td><code>playwright</code> Chromium + <code>httpx</code> + SQLite</td>
+                <td><code>v1.64.1</code></td>
+                <td>Automated media state machine auditor (<code>readyState = 4</code>, playhead delta, queue rotation), 404 image/link scanner, distilled DOM LLM proofreading</td>
+              </tr>
+              <tr>
+                <td><strong>Media Engine</strong></td>
+                <td>Dual-DOM HTML5 <code>&lt;video&gt;</code> + <code>hls.js</code> + Web Audio API</td>
+                <td><code>1.7.4</code></td>
+                <td>Seamless Slot A / Slot B pre-buffering, automatic sequential queue rotation, HLS <code>.m3u8</code> + MP4 proxy, DynamicsCompressor normalizer</td>
+              </tr>
+              <tr>
+                <td><strong>Cloud Database &amp; Auth</strong></td>
+                <td><code>@supabase/supabase-js</code> + <code>@supabase/ssr</code></td>
+                <td><code>2.118.0</code></td>
+                <td>PostgreSQL cloud persistence (<code>video_catalog</code>, <code>newspaper_articles</code>, <code>profiles</code>, <code>rooms</code>, <code>messages</code>), server cache invalidation, RLS</td>
+              </tr>
+              <tr>
+                <td><strong>Edge Coordinator</strong></td>
+                <td><code>partyserver</code> + <code>partysocket</code> (Cloudflare DO)</td>
+                <td><code>1.3.0</code></td>
+                <td>Optional stateful WebSocket room coordinator with 100ms delta batching &amp; 30s alarm checkpoints; automatic fallback to stateless <code>/api/room/[slug]/sync</code></td>
+              </tr>
+              <tr>
+                <td><strong>Rate Limiting</strong></td>
+                <td><code>@upstash/ratelimit</code> + <code>@upstash/redis</code></td>
+                <td><code>2.2.0</code></td>
+                <td>Sliding-window IP &amp; user rate limiting with automatic in-memory fallback when Redis env vars are absent</td>
+              </tr>
+              <tr>
+                <td><strong>Scraper Pipeline</strong></td>
+                <td>Node Serverless Scraper + Python 3.11 Crawler</td>
+                <td><code>Py 3.11</code></td>
+                <td>20-platform GTA VI video crawler + FFmpeg 64-bit DCT perceptual hash deduplication + Wikimedia/Reddit/Archive high-res photo scraper</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 02: SYSTEM TOPOLOGY & DATA FLOW
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-2">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 02</span>
+            <span class="section-title">System Topology &amp; Data Flow Architecture</span>
+          </div>
+          <span class="section-tag">4-Tier End-to-End Pipeline</span>
+        </div>
+
+        <div class="arch-diagram">
+          <div class="arch-layer">
+            <div class="arch-layer-title">TIER 1 // CLIENT PRESENTATION &amp; BROADSHEET SHELL (React 19 + Next.js App Router)</div>
+            <div class="arch-nodes">
+              <div class="arch-node">
+                <strong>NewspaperShell.tsx + paper.css</strong>
+                <span>Top Utility Bar, Masthead, Sticky Nav, ☀️ Day Paper / 🌙 Night Wire theme persistence (localStorage <code>lv_paper_edition</code>).</span>
+              </div>
+              <div class="arch-node">
+                <strong>UrbanObserverLayout.tsx</strong>
+                <span>3-Column Front Page (22% Top 5 / 53% Live Broadcast Stage + X-Ray Deck / 25% Live Citizen Wire) + 12 Editorial Sections.</span>
+              </div>
+              <div class="arch-node">
+                <strong>HTML5Player.tsx + useSeamlessPlayer.ts</strong>
+                <span>Dual-Slot &lt;video&gt; (Slot A &amp; B), &lt;16ms cut, &lt;50ms drift sync, ⚡ Live Sync instant recovery, DriveInAudioGraph DSP.</span>
+              </div>
+              <div class="arch-node">
+                <strong>3-Stage Forensic &amp; PiP Ecosystem</strong>
+                <span>ForensicWorkbenchOverlay (8× Loupe + Contact Sheet), XRayTelemetryDeck (VTTCue + Radar Map), DetachableCommandCenter (OS PiP).</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="arch-layer">
+            <div class="arch-layer-title">TIER 2 // SYNCHRONIZATION &amp; REALTIME COORDINATION LAYER</div>
+            <div class="arch-nodes">
+              <div class="arch-node">
+                <strong>useDriveInRoom.ts (Client Hook)</strong>
+                <span>RTT-compensated server clock offset (EMA 80/20 smoothing), lock-free <code>getSyncedOffsetSec()</code>, automatic dual-mode switching.</span>
+              </div>
+              <div class="arch-node">
+                <strong>Mode A: /api/room/[slug]/sync</strong>
+                <span>Zero-config deterministic epoch-modulo playlist coordinator over filtered <code>video_catalog</code>. Always active on Vercel out-of-the-box.</span>
+              </div>
+              <div class="arch-node">
+                <strong>Mode B: party/src/server.ts (Cloudflare DO)</strong>
+                <span>WebSocket Hibernation Durable Object, 24-stall parking lot (Rows A/B/C), 100ms delta tuples, +15s Encore Surge, /proxy-media CORS edge proxy.</span>
+              </div>
+              <div class="arch-node">
+                <strong>lib/realtime/chat.ts + presence.ts</strong>
+                <span>Supabase Realtime Broadcast + Postgres Changes for Citizen Wire chat &amp; live viewer presence count, with REST polling fallback.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="arch-layer">
+            <div class="arch-layer-title">TIER 3 // NEXT.JS SERVERLESS API &amp; HYBRID PERSISTENCE LAYER</div>
+            <div class="arch-nodes">
+              <div class="arch-node">
+                <strong>Hybrid Article Store (store.server.ts)</strong>
+                <span>Merges 52 built-in articles with custom/edited articles in <code>data/newspaper-store.json</code> AND Supabase <code>newspaper_articles</code>.</span>
+              </div>
+              <div class="arch-node">
+                <strong>Byte-Range Stream Proxy (/api/video/stream)</strong>
+                <span>SSRF-hardened RFC 1918-blocking proxy for 20 whitelisted video hosts; forwards <code>Range</code> headers (206 Partial Content) with CORS.</span>
+              </div>
+              <div class="arch-node">
+                <strong>Admin Studio APIs (/api/admin/*)</strong>
+                <span>3-way auth (<code>lv_admin_token</code> cookie, <code>x-admin-passcode</code>, Supabase Admin JWT). Manages articles, media library, photo scraper, and broadcast queue.</span>
+              </div>
+              <div class="arch-node">
+                <strong>Supabase Postgres + Storage</strong>
+                <span>Tables: <code>video_catalog</code>, <code>newspaper_articles</code>, <code>room_playback_state</code>, <code>profiles</code>, <code>rooms</code>, <code>messages</code>, <code>aggregator_runs</code>.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="arch-layer" style="margin-bottom:0;">
+            <div class="arch-layer-title">TIER 4 // AUTOMATED 20-PLATFORM VIDEO &amp; PHOTO INGESTION PIPELINE</div>
+            <div class="arch-nodes">
+              <div class="arch-node">
+                <strong>Built-In Node Scraper (/api/admin/videos)</strong>
+                <span>Runs directly on Vercel/Node with zero Python dependencies: scrapes Reddit r/GTA6, Internet Archive, Dailymotion, and Rockstar embeds.</span>
+              </div>
+              <div class="arch-node">
+                <strong>Built-In Photo Scraper (/api/admin/media)</strong>
+                <span>Scrapes high-res GTA VI / Vice City photography from Wikimedia Commons, Reddit r/GTA6, and Internet Archive into local + Supabase Storage.</span>
+              </div>
+              <div class="arch-node">
+                <strong>20-Platform Python Crawler (crawler/*.py)</strong>
+                <span>GitHub Actions every 6h (<code>0 */6 * * *</code>) + Vercel Cron (<code>/api/cron/aggregate</code>). Crawls 20 video platforms + FFmpeg 64-bit DCT pHash deduplication.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 03: COMPLETE CAPABILITY MATRIX
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-3">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 03</span>
+            <span class="section-title">Complete Feature &amp; Capability Matrix</span>
+          </div>
+          <span class="section-tag">100% Implemented &amp; Verified Capabilities</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Subsystem</th>
+                <th>Capability / Feature</th>
+                <th>Status</th>
+                <th>Primary Implementation Files</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Broadsheet Theme</strong></td>
+                <td>Dual-Edition Theme Toggle: <strong>☀️ DAY PAPER</strong> (Warm Newsprint <code>#F4EFE4</code>) &amp; <strong>🌙 NIGHT WIRE</strong> (Vice Midnight <code>#0B0E14</code>) in Top Bar &amp; Sticky Nav</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/newspaper/paper.css</code>, <code>components/newspaper/NewspaperShell.tsx</code></td>
+              </tr>
+              <tr>
+                <td><strong>Front-Page Layout</strong></td>
+                <td>12-Section Urban Observer PRO Layout: 3-column Hero (Top 5 This Week + Live Broadcast Theater + Citizen Wire), 4-col grid, Dark Feature Block, Category Spotlights, Must Read 60/40, Latest Dispatches pagination</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/newspaper/UrbanObserverLayout.tsx</code>, <code>lib/newspaper/auto-layout.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Video Synchronization</strong></td>
+                <td>Sub-50ms Communal Playback Sync across all connected browsers + Dual-DOM <code>&lt;video&gt;</code> Slot A/B <code>&lt;16ms</code> transitions + Instant <strong>⚡ LIVE SYNC</strong> recovery after pause/scrub</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/video-engine/HTML5Player.tsx</code>, <code>components/video-engine/hooks/useSeamlessPlayer.ts</code>, <code>lib/realtime/useDriveInRoom.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Web Audio DSP</strong></td>
+                <td>Single-<code>AudioContext</code> pipeline: DynamicsCompressor loudness normalizer, -12dB voice ducking, 950Hz Cabin FM filter, 20-120Hz sub-bass FFT analyser, 3D stereo-panned synthesized car horns</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>lib/audio/DriveInAudioGraph.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Stage 1: Forensic Loupe</strong></td>
+                <td>Full-screen theater <code>createPortal</code> modal with <code>1×/2×/4×/8×</code> zoom, drag pan, <code>-10f/-1f/+1f/+10f</code> frame stepper, bounding-box callout tool, single-frame PNG download, 6-Frame Contact Sheet Storyboard generator, and <code>/admin</code> draft sync</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/video-engine/ForensicWorkbenchOverlay.tsx</code></td>
+              </tr>
+              <tr>
+                <td><strong>Stage 2: X-Ray &amp; Radar</strong></td>
+                <td>Native <code>HTMLTrackElement (kind="metadata")</code> + <code>VTTCue</code> stream driving real-time Vehicle, Weapon/Gear, Character Trust Meter cards, Provenance Badges, interactive 6-County Leonida Radar SVG Map, and <code>.vtt</code> export</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/newspaper/XRayTelemetryDeck.tsx</code>, <code>lib/video/xray-telemetry.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Stage 3: Detachable PiP</strong></td>
+                <td>Zero-reload DOM reparenting of live video between Hero Stage, Scroll-Triggered Sticky Corner Mini-Deck, and Chromium OS <code>window.documentPictureInPicture</code> floating command center with live chat</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/newspaper/DetachableCommandCenter.tsx</code></td>
+              </tr>
+              <tr>
+                <td><strong>Citizen Wire Chat</strong></td>
+                <td>Real-time chat with profanity/URL moderation filter, shadowban support, hashtag quick-injection (<code>#VICECITY</code>, <code>#LUCIA</code>, <code>#TRAILER</code>, <code>#RAGE</code>), and live viewer presence counter</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>lib/realtime/chat.ts</code>, <code>lib/moderation/filter.ts</code>, <code>app/api/chat/route.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Newsroom Admin Studio</strong></td>
+                <td>Password/Cookie/Role protected <code>/admin</code> studio with 4 presets (Feature, Police Blotter, Utility Guide, Breaking Brief), block editor, Top 1–5 pinning, Forensic Captures importer, and live layout preview</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>app/admin/page.tsx</code>, <code>components/newspaper/AdminNewsroomView.tsx</code>, <code>app/api/admin/articles/route.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Admin Photo Scraper</strong></td>
+                <td>1-click <strong>🔄 Scrape Fresh Hi-Res Photos</strong> (Wikimedia Commons, Reddit r/GTA6, Internet Archive) + Direct Image URL Importer + PC Drag-and-Drop Upload with dual local + Supabase Storage persistence</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>app/api/admin/media/route.ts</code>, <code>app/api/admin/upload/route.ts</code></td>
+              </tr>
+              <tr>
+                <td><strong>Admin Broadcast Tab</strong></td>
+                <td><strong>📺 BROADCAST &amp; SCRAPER</strong> tab in <code>/admin</code>: view live queue &amp; aggregator run logs, <strong>🔄 Scrape Fresh Clips Now</strong>, <strong>▶ Force Play Now</strong> (overrides global broadcast immediately), approve/pause/delete clips, or add custom MP4/YouTube URLs</td>
+                <td><span class="badge badge-live">LIVE</span></td>
+                <td><code>components/newspaper/AdminBroadcastQueueTab.tsx</code>, <code>app/api/admin/videos/route.ts</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 04: DUAL-EDITION BROADSHEET UI & EDITORIAL SYSTEM
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-4">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 04</span>
+            <span class="section-title">Dual-Edition Broadsheet UI &amp; Editorial Content Engine</span>
+          </div>
+          <span class="section-tag">Typography, Theme Variables &amp; Auto-Layout</span>
+        </div>
+
+        <h3>1. Dual-Edition Theme System (☀️ DAY PAPER vs 🌙 NIGHT WIRE — Palette 3)</h3>
+        <p>
+          Defined in <code>components/newspaper/paper.css</code> and <code>app/globals.css</code>, controlled by <code>components/newspaper/NewspaperShell.tsx</code> via <code>document.documentElement.setAttribute("data-edition", edition)</code> and persisted in <code>localStorage.getItem("lv_paper_edition")</code> (with zero-flash URL override via <code>?edition=night|day</code>):
+        </p>
+        <div class="grid-2">
+          <div class="subcard">
+            <div class="subcard-title">☀️ DAY PAPER (Alabaster Newsprint &amp; Editorial Burgundy)</div>
+            <ul>
+              <li><code>--np-bg: #FAF9F6</code> — Alabaster canvas eliminating stark white glare.</li>
+              <li><code>--np-surface: #FFFFFF</code> / <code>--np-surface-alt: #F3EFE6</code> — Layered tactile newsprint cards.</li>
+              <li><code>--np-ink: #121212</code> / <code>--np-ink-soft: #2C2925</code> — High-density carbon ink.</li>
+              <li><code>--np-red: #831843</code> — Deep editorial burgundy accent.</li>
+              <li><code>--np-cyan: #0F766E</code> — Coastal teal telemetry secondary accent.</li>
+              <li><code>--np-pinstripe-ink: rgba(18, 18, 18, 0.72)</code> — Authentic press pinstripes.</li>
+            </ul>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">🌙 NIGHT WIRE (Archival Carbon &amp; Desaturated Crimson)</div>
+            <ul>
+              <li><code>--np-bg: #0A0A0A</code> — Tinted archival carbon canvas (never harsh #000000).</li>
+              <li><code>--np-surface: #16181F</code> / <code>--np-surface-alt: #1E222B</code> — Progressive surface elevation.</li>
+              <li><code>--np-ink: #FAF9F6</code> / <code>--np-ink-muted: #8C887E</code> — Softened alabaster foreground text.</li>
+              <li><code>--np-red: #9F1239</code> — Desaturated crimson editorial accent.</li>
+              <li><code>--np-cyan: #14B8A6</code> — Coastal teal active telemetry highlight.</li>
+              <li><code>--np-rule: #242834</code> — Crisp 1px structural bounds replacing arcade neon glows.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>2. 3-Tier Human-Authored Typographic Architecture</h3>
+        <p>
+          Derived from the <em>Professional Website Fonts and Colors</em> specification, replacing generic template fonts with a disciplined editorial hierarchy:
+        </p>
+        <div class="grid-3">
+          <div class="subcard">
+            <div class="subcard-title">Headline Tier: Newsreader</div>
+            <p><strong>Role:</strong> Display headlines, H1/H2 titles, and masthead text (<code>opsz 6..72</code>, 600 weight, <code>-0.015em</code> tracking). High stroke-contrast optical serif providing an authoritative, human-crafted broadsheet presence.</p>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">Body Tier: DM Sans</div>
+            <p><strong>Role:</strong> Subheadings (H3–H6), long-form narrative body copy, and UI controls (<code>opsz 9..40</code>, 400/600 weight, 1.6 line-height). Low-contrast geometric workhorse engineered for fatigue-free reading.</p>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">Telemetry Tier: DM Mono</div>
+            <p><strong>Role:</strong> Video timecodes, frame counters, byline metadata, tags, and radar coordinates (500 weight). Uses <code>font-variant-numeric: tabular-nums</code> to eliminate number-jitter during live scrubbing.</p>
+          </div>
+        </div>
+
+        <h3>3. Metric-Matched Fallback Architecture (CLS = 0.00)</h3>
+        <p>
+          To prevent Cumulative Layout Shift during web font loading, <code>app/globals.css</code> declares local fallback <code>@font-face</code> definitions with calibrated metric overrides matching the precise glyph boundaries of Newsreader and DM Sans:
+        </p>
+        <pre><code>@font-face {
+  font-family: 'Newsreader-Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 103.50%;
+  ascent-override: 92.40%;
+  descent-override: 24.10%;
+  line-gap-override: 0.00%;
+}
+
+@font-face {
+  font-family: 'DMSans-Fallback';
+  src: local('Arial'), local('Helvetica Neue');
+  size-adjust: 105.64%;
+  ascent-override: 93.80%;
+  descent-override: 23.60%;
+  line-gap-override: 0.00%;
+}</code></pre>
+
+        <h3>4. Webpage Transition Optimization &amp; Top Route Progress Bar</h3>
+        <p>
+          To eliminate the 2-second momentary blank/white screen lag on route transitions, the platform pairs Next.js client router prefetching with <code>components/RouteProgressBar.tsx</code>. This component renders a fixed top 2px progress bar with a smooth burgundy-to-teal glow gradient (<code>#831843</code> &rarr; <code>#9F1239</code> &rarr; <code>#0F766E</code>) providing immediate (&lt;50ms) tactile visual feedback while pages hydrate seamlessly in background without layout flash.
+        </p>
+
+        <h3>5. Editorial Taxonomy (10 Categories &amp; 3 Staff Personas)</h3>
+        <div class="grid-2">
+          <div class="subcard">
+            <div class="subcard-title">Top-Level &amp; Sub-Categories (lib/newspaper/categories.ts)</div>
+            <ul>
+              <li><code>trailers-media</code> — <strong>Trailers &amp; Media</strong> (Sub-categories: <code>trailers</code>, <code>radio-music</code>, <code>in-game-media</code>)</li>
+              <li><code>characters</code> — <strong>Characters</strong> (Lucia Caminos, Jason Duval, Boobie Ike, Brian Heder, Cal Hampton, Real Dimez, Raul Bautista, Dre'Quan Priest)</li>
+              <li><code>leaks-rumors</code> — <strong>Leaks &amp; Rumors</strong> (Verified telemetry vs Leonida Man speculation)</li>
+              <li><code>story</code> — <strong>Story</strong> (Criminal conspiracy &amp; trust/betrayal mechanics)</li>
+              <li><code>leonida</code> — <strong>Leonida</strong> (Vice City, Leonida Keys, Grassrivers, Port Gellhorn, Ambrosia, Mount Kalaga)</li>
+              <li><code>tech-rage</code> — <strong>Tech &amp; RAGE</strong> (RAGE 9 RTGI, water physics, AI density, console targets)</li>
+              <li><code>vehicles-weapons</code> — <strong>Vehicles &amp; Weapons</strong> (Carrying systems, trunk lockers, vessel specs)</li>
+            </ul>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">Editorial Presets &amp; Auto-Layout (lib/newspaper/auto-layout.ts)</div>
+            <ul>
+              <li><code>standard-feature</code> — Full long-form investigative report with drop-caps, pull-quotes, tables, and inline X-Ray video jump triggers.</li>
+              <li><code>police-blotter</code> — Leonida Sheriff / Vice City PD incident dispatch with red incident badges.</li>
+              <li><code>utility-guide</code> — Structured tactical breakdown, map guide, or vehicle/weapon spec sheet.</li>
+              <li><code>breaking-brief</code> — High-urgency wire bulletin.</li>
+              <li><strong>Automatic Front-Page Placement:</strong> Setting <code>featuredRank: 1..5</code> pins an article to the Top 5 / Hero slots; otherwise <code>orderArticlesForNewspaper()</code> automatically sorts published articles newest-first into their category sections and ticker.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 05: SYNCHRONIZED COMMUNAL BROADCAST & VIDEO ENGINE
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-5">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 05</span>
+            <span class="section-title">Synchronized Communal Broadcast &amp; Dual-Slot Video Engine</span>
+          </div>
+          <span class="section-tag">Sub-50ms Drift Control &amp; Instant Live Resync</span>
+        </div>
+
+        <h3>1. Dual-Mode Room Clock Synchronization (<code>lib/realtime/useDriveInRoom.ts</code>)</h3>
+        <p>
+          Every viewer connected to Leonida Vice is synchronized to the <code>main-theater</code> broadcast clock using an RTT-compensated server clock offset (Exponential Moving Average: 80% prior offset + 20% new sample):
+        </p>
+        <pre><code>// Authoritative playback position at any instant (lock-free read):
+const ServerNow = () => Date.now() + serverClockOffsetRef.current;
+const getSyncedOffsetSec = () => Math.max(0, (ServerNow() - clipStartRef.current) / 1000);</code></pre>
+        <ul>
+          <li><strong>Mode A — Deterministic Server-Clock Coordinator (<code>/api/room/[slug]/sync</code>):</strong> Works out-of-the-box on Vercel with zero external worker configuration. Computes a deterministic epoch-modulo cycle across all active, approved English clips in <code>video_catalog</code> (with priority override if an admin clicked <strong>▶ Force Play Now</strong> in <code>/admin</code>). Schedules an exact boundary timer (<code>durMs - offsetMs + 120ms</code>) to transition clips at the exact millisecond each clip finishes.</li>
+          <li><strong>Mode B — Cloudflare PartyServer Durable Object (<code>party/src/server.ts</code>):</strong> Activated automatically when <code>NEXT_PUBLIC_PARTYSERVER_HOST</code> is set. Uses Cloudflare WebSocket Hibernation, assigns viewers to a 24-stall spatial drive-in lot (Row A VIP Scouts, Row B Crew, Row C General), batches crowd reactions into 100ms differential delta tuples (<code>SEAT_JOIN</code>, <code>CAR_FLASH</code>, <code>CAR_HAZARD</code>, <code>CAR_HORN</code>, <code>TALLY</code>), triggers a <code>+15s</code> <code>ENCORE_SURGE</code> when ≥25% of the lot flashes high-beams, and flushes state to Supabase every 30s.</li>
+        </ul>
+
+        <h3>2. Dual-DOM <code>&lt;video&gt;</code> Slot A / Slot B Engine (<code>useSeamlessPlayer.ts</code> &amp; <code>HTML5Player.tsx</code>)</h3>
+        <ul>
+          <li><strong>Zero-Black-Frame Transitions (<code>&lt;16ms</code>):</strong> <code>HTML5Player.tsx</code> mounts two persistent <code>&lt;video&gt;</code> elements (<code>playerARef</code> and <code>playerBRef</code>). While Slot A plays <code>syncedCurrent</code>, Slot B silently attaches and pre-buffers <code>syncedNext</code> in the background. On clip transition, <code>useSeamlessPlayer</code> flips <code>activeSlot</code>, swaps <code>zIndex</code> (<code>2</code> vs <code>1</code>), switches the Web Audio gain bus in <code>8ms</code>, seeks to <code>alignElementToRoomClock(preEl, true)</code>, and calls <code>preEl.play()</code>.</li>
+          <li><strong>3-Tier Media Proxy Fallback (<code>getStrategyOrder</code>):</strong>
+            <ol>
+              <li><code>party</code> — Cloudflare Worker <code>/proxy-media</code> edge byte-range CORS proxy (when <code>NEXT_PUBLIC_PARTYSERVER_HOST</code> is configured).</li>
+              <li><code>direct</code> — Direct CDN stream (with <code>crossOrigin="anonymous"</code> automatically enabled on native CORS CDNs: <code>archive.org</code>, <code>supabase.co</code>, <code>mux.dev</code>, <code>peertube</code>).</li>
+              <li><code>vercel</code> — Next.js <code>/api/video/stream?url=...</code> byte-range proxy (forwards HTTP <code>Range</code> headers, returns <code>206 Partial Content</code> with <code>Access-Control-Allow-Origin: *</code>).</li>
+            </ol>
+          </li>
+          <li><strong>Continuous Drift Alignment &amp; Instant <code>⚡ LIVE SYNC</code> Recovery:</strong>
+            <ul>
+              <li>During normal playback, <code>alignElementToRoomClock(el, false)</code> nudges <code>el.playbackRate</code> by <code>±3%</code> (<code>0.97</code> or <code>1.03</code>) when drift exceeds <code>50ms</code>, or hard-seeks if drift exceeds <code>1.15s</code>.</li>
+              <li>When a user pauses, steps frames (<code>-1f/+1f</code>), or scrubs the timeline, <code>isForensicHold</code> becomes <code>true</code>. Background room transitions do <strong>not</strong> yank the user's paused clip away—instead, any new live clip pre-buffers into the inactive slot.</li>
+              <li>Clicking any <strong><code>⚡ LIVE SYNC</code> / <code>⚡ LIVE RESYNC</code></strong> button calls <code>resumeRoomSync()</code>, which clears <code>isForensicHold</code>, immediately hard-seeks to <code>getSyncedOffsetSec()</code> (for any drift <code>&gt; 0.06s</code> up to <code>dur - 0.15s</code>) OR executes an instant <code>&lt;16ms</code> slot swap if the broadcast moved to a new clip while paused, updates timecode/frame/progress state synchronously, resumes playback, and fires <code>onRefreshSync()</code> in parallel.</li>
+            </ul>
+          </li>
+          <li><strong>Deterministic Auto-Advance Transition Recovery:</strong>
+            <p>
+              To eliminate stream stalls where the video player halted after playing the initial video, the broadcast engine implements a 3-way boundary failsafe in <code>HTML5Player.tsx</code> and <code>useDriveInRoom.ts</code>:
+            </p>
+            <ol>
+              <li><strong>Native <code>onEnded</code> Listener:</strong> Immediately triggers <code>handleEnded()</code> and swaps active DOM slots when media reaches completion.</li>
+              <li><strong>Room Clock Boundary Guard:</strong> Schedules an authoritative timer (<code>clipStartMs + durationMs - ServerNow() + 120ms</code>) that initiates the next clip even if browser power-throttling drops the native ended event.</li>
+              <li><strong>Decoder Stall Timeout:</strong> If an active video's <code>currentTime</code> stalls for &gt;4.0s while <code>readyState &lt; 2</code>, the engine automatically rolls over to the next item in the pre-buffered catalog queue to maintain 24/7 continuous communal broadcast without manual intervention.</li>
+            </ol>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 06: 3-STAGE FORENSIC VIDEO STACK
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-6">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 06</span>
+            <span class="section-title">3-Stage Interactive GTA VI Video Ecosystem</span>
+          </div>
+          <span class="section-tag">Forensic Loupe • Bi-Directional X-Ray • Detachable PiP</span>
+        </div>
+
+        <div class="grid-3">
+          <div class="subcard">
+            <div class="subcard-title">Stage 1: Forensic Workbench Overlay</div>
+            <p><strong>File:</strong> <code>components/video-engine/ForensicWorkbenchOverlay.tsx</code></p>
+            <ul>
+              <li>Portals into <code>document.body</code> as a full-viewport theater modal (<code>z-[95]</code>) so it is spacious even when triggered from the Sticky Mini-Deck.</li>
+              <li><strong>800% Hardware Canvas Loupe:</strong> Draws the active <code>&lt;video&gt;</code> frame onto a <code>960×540</code> 2D canvas preserving true aspect ratio (letterbox/pillarbox), with <code>1×</code>, <code>2×</code>, <code>4×</code>, <code>8×</code> zoom + mouse-wheel zoom + click-drag pan.</li>
+              <li><strong>Frame-Accurate Stepping:</strong> Uses <code>HTMLVideoElement.requestVideoFrameCallback</code> to detect stream FPS (<code>24/30/60</code>) and step <code>-10f</code>, <code>-1f</code>, <code>+1f</code>, <code>+10f</code> (plus keyboard <code>ArrowLeft</code>/<code>ArrowRight</code>/<code>Space</code>).</li>
+              <li><strong>Bounding-Box Callouts:</strong> Switch to <code>🎯 BOX TOOL</code> to drag crimson forensic callout rectangles with custom text labels directly onto the frame.</li>
+              <li><strong>1-Click Exports &amp; Admin Sync:</strong> Capture single PNG frames or generate a <strong><code>1920×1220</code> 6-Frame Branded Contact Sheet Storyboard PNG</strong>; all captures automatically save to <code>localStorage["lv_forensic_draft_frames_v1"]</code> and appear inside <code>/admin</code>!</li>
+            </ul>
+          </div>
+
+          <div class="subcard">
+            <div class="subcard-title">Stage 2: Bi-Directional X-Ray &amp; Radar</div>
+            <p><strong>Files:</strong> <code>components/newspaper/XRayTelemetryDeck.tsx</code>, <code>lib/video/xray-telemetry.ts</code></p>
+            <ul>
+              <li><strong>Native WebVTT Metadata Track:</strong> <code>useSeamlessPlayer</code> attaches a hidden <code>HTMLTrackElement (kind="metadata", label="leonida-xray")</code> populated with JSON <code>VTTCue</code> payloads.</li>
+              <li><strong>3 Interactive Tabs:</strong>
+                <ol>
+                  <li><code>🧬 LIVE X-RAY ASSETS</code>: Active scene breakdown with Provenance Badge (<code>CONFIRMED RAGE 9</code>, <code>LEAK ARCHIVE TELEMETRY</code>, <code>ANALYST SPECULATION</code>), Vehicle spec &amp; 6-slot Trunk Locker meter, Weapon/Gear loadout, Character &amp; Trust Sync %, and deep-links to related articles.</li>
+                  <li><code>🗺️ LEONIDA RADAR SYNC</code>: Interactive 6-County SVG Radar Map (<code>VC-OB</code> Ocean Beach, <code>VC-DT</code> Vice Downtown, <code>LK-7M</code> Leonida Keys, <code>GR-EV</code> Grassrivers, <code>PC-88</code> Port Gellhorn, <code>AM-IN</code> Ambrosia). Clicking any radar pin seeks the broadcast to that region!</li>
+                  <li><code>⏱️ CUE SHEET &amp; GEO</code>: Complete clickable scene index + 1-click <code>⬇ EXPORT .VTT</code> WebVTT file download.</li>
+                </ol>
+              </li>
+            </ul>
+          </div>
+
+          <div class="subcard">
+            <div class="subcard-title">Stage 3: Detachable PiP Command Center</div>
+            <p><strong>File:</strong> <code>components/newspaper/DetachableCommandCenter.tsx</code></p>
+            <ul>
+              <li><strong>Zero-Reload DOM Reparenting:</strong> Moves the live <code>videoStageNodeRef</code> DOM node between containers using <code>appendChild()</code> without unmounting React state or interrupting Web Audio / video playback.</li>
+              <li><strong>Automatic Scroll Sticky Mini-Deck:</strong> An <code>IntersectionObserver</code> on <code>heroSlotRef</code> detects when the user scrolls past the Hero Broadcast Stage and docks the live video + X-Ray strip + region jump pills into a <code>bottom-4 right-4 z-50</code> Broadsheet Mini-Deck.</li>
+              <li><strong>Chromium Document Picture-in-Picture:</strong> Clicking <code>⧉ PiP COMMAND</code> invokes <code>window.documentPictureInPicture.requestWindow({ width: 460, height: 640 })</code>, clones all stylesheets into the always-on-top OS window, and portals the live video, X-Ray telemetry cards, region jump buttons, and interactive Citizen Wire chat into the floating OS window!</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 07: WINDOW CUSTOM EVENT BUS PROTOCOL
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-7">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 07</span>
+            <span class="section-title">Global Window CustomEvent Bus &amp; Deep-Link Protocol</span>
+          </div>
+          <span class="section-tag">Decoupled Cross-Component Messaging</span>
+        </div>
+
+        <p>
+          To allow newspaper articles, radar pins, header ribbons, X-Ray cards, and the `/admin` studio to control the video player without prop-drilling across unrelated routes, Leonida Vice uses 5 typed `window.dispatchEvent(new CustomEvent(...))` signals:
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Event Name</th>
+                <th>Detail Payload Type</th>
+                <th>Dispatched By</th>
+                <th>Handled By &amp; Behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>lv:seek-video</code></td>
+                <td><code>{ timestampSec: number; regionId?: LeonidaRegionId; cueId?: string; reason?: string; autoPauseForensic?: boolean }</code></td>
+                <td><code>XRayTelemetryDeck</code> (Radar pins &amp; Cue Sheet), <code>DetachableCommandCenter</code>, <code>ArticlePageView</code></td>
+                <td><code>useSeamlessPlayer.ts</code> — Enters forensic hold, seeks active <code>&lt;video&gt;</code> to matching region cue or <code>timestampSec</code>, updates X-Ray cue &amp; frame counter.</td>
+              </tr>
+              <tr>
+                <td><code>lv:resume-live-sync</code></td>
+                <td><code>undefined</code></td>
+                <td><code>UrbanObserverLayout</code>, <code>XRayTelemetryDeck</code>, <code>DetachableCommandCenter</code></td>
+                <td><code>useSeamlessPlayer.ts</code> — Calls <code>resumeRoomSync()</code> to exit forensic hold, hard-seek to live server clock (or swap to new live clip in <code>&lt;16ms</code>), and play.</td>
+              </tr>
+              <tr>
+                <td><code>lv:toggle-forensic-loupe</code></td>
+                <td><code>undefined</code></td>
+                <td><code>UrbanObserverLayout</code>, <code>XRayTelemetryDeck</code>, <code>DetachableCommandCenter</code></td>
+                <td><code>HTML5Player.tsx</code> — Toggles <code>forensicOpen</code> state to mount/unmount <code>ForensicWorkbenchOverlay</code>.</td>
+              </tr>
+              <tr>
+                <td><code>lv:toggle-document-pip</code></td>
+                <td><code>undefined</code></td>
+                <td><code>UrbanObserverLayout</code>, <code>XRayTelemetryDeck</code></td>
+                <td><code>DetachableCommandCenter.tsx</code> — Opens or docks the Chromium OS <code>documentPictureInPicture</code> window (or Sticky Mini-Deck fallback).</td>
+              </tr>
+              <tr>
+                <td><code>lv:forensic-frames-updated</code></td>
+                <td><code>CapturedForensicFrame[]</code></td>
+                <td><code>saveForensicFrameToDrafts()</code> in <code>lib/video/xray-telemetry.ts</code></td>
+                <td><code>AdminNewsroomView.tsx</code> — Live-refreshes the Forensic Storyboard Captures tray inside <code>/admin</code> when new frames are snapped.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <strong>Inbound URL Query Deep-Linking:</strong> Navigating to <code>/?seek=28&amp;region=leonida-keys</code> (used by the <em>"⚡ Sync Broadcast to Timestamp"</em> buttons inside individual article pages) is automatically read by <code>useSeamlessPlayer.ts</code> on mount to seek the player to the exact scene referenced by the article.
+        </p>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 08: NEWSROOM ADMIN STUDIO (/ADMIN)
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-8">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 08</span>
+            <span class="section-title">Newsroom Admin Studio (<code>/admin</code>) &amp; Hybrid CMS</span>
+          </div>
+          <span class="section-tag">Authentication, Editorial Publishing, Media &amp; Broadcast Control</span>
+        </div>
+
+        <h3>1. 3-Way Admin Authentication (<code>lib/newspaper/admin-auth.ts</code>)</h3>
+        <p>Every request to <code>/api/admin/*</code> is verified by <code>verifyAdminRequest(request)</code>, which authorizes the caller if <strong>any</strong> of the following 3 credentials are valid:</p>
+        <ol>
+          <li><strong>Signed HttpOnly Session Cookie (<code>lv_admin_token</code>):</strong> Created on login via <code>POST /api/admin/auth</code> using HMAC-SHA256 (<code>admin.&lt;exp&gt;.&lt;sig&gt;</code>, 14-day TTL, timing-safe comparison against <code>ADMIN_PASSCODE</code>; defaults to <code>leonida305</code> in local non-production dev).</li>
+          <li><strong>Direct Header (<code>x-admin-passcode</code>):</strong> For CLI scripts or programmatic admin automation.</li>
+          <li><strong>Supabase Bearer JWT:</strong> Any authenticated Supabase user whose row in <code>public.profiles</code> has <code>role === "admin"</code>.</li>
+        </ol>
+
+        <h3>2. The 3 Admin Studio Workspaces</h3>
+        <div class="grid-3">
+          <div class="subcard">
+            <div class="subcard-title">Workspace A: Article Composer &amp; Desk</div>
+            <p><strong>File:</strong> <code>components/newspaper/AdminNewsroomView.tsx</code></p>
+            <ul>
+              <li>Create or edit any built-in or custom article.</li>
+              <li>Choose from 4 Editorial Presets, 10 Categories, 3 Staff Authors, Status (<code>published</code>, <code>draft</code>, <code>archived</code>), and Front-Page Pinning (<code>TOP 1..5</code>).</li>
+              <li>Structured Block Editor supporting <code>h2</code>, <code>p</code>, <code>img</code>, <code>quote</code>, <code>list</code>, and <code>table</code> blocks, plus 1-click insertion of captured Forensic Loupe frames.</li>
+            </ul>
+          </div>
+
+          <div class="subcard">
+            <div class="subcard-title">Workspace B: 4-Source Media Library</div>
+            <p><strong>Files:</strong> <code>app/api/admin/media/route.ts</code>, <code>app/api/admin/upload/route.ts</code></p>
+            <ul>
+              <li><strong>🔄 Scrape Fresh Hi-Res Photos:</strong> Pulls new high-resolution GTA VI / Vice City / Miami photography from Wikimedia Commons, Reddit <code>r/GTA6</code> &amp; <code>r/GTA</code>, and Internet Archive.</li>
+              <li><strong>Direct Image URL Importer:</strong> Paste any <code>https://</code> image URL to download and persist it into your library.</li>
+              <li><strong>PC Drag &amp; Drop Upload:</strong> Upload PNG/JPG/WebP/GIF/AVIF up to 12MB.</li>
+              <li><strong>Dual Persistence:</strong> Saves to both <code>public/images/uploads/</code> and the Supabase Storage <code>article-images</code> public bucket.</li>
+            </ul>
+          </div>
+
+          <div class="subcard">
+            <div class="subcard-title">Workspace C: 📺 Broadcast &amp; Scraper</div>
+            <p><strong>Files:</strong> <code>components/newspaper/AdminBroadcastQueueTab.tsx</code>, <code>app/api/admin/videos/route.ts</code></p>
+            <ul>
+              <li><strong>🔄 Scrape Fresh Clips Now:</strong> Triggers the built-in multi-platform GTA 6 video scraper (plus Python crawler in local dev) and logs the run to <code>aggregator_runs</code>.</li>
+              <li><strong>▶ Force Play Now:</strong> Overrides the global broadcast room clock for all connected viewers immediately with any selected clip.</li>
+              <li><strong>Queue Curation &amp; Manual Add:</strong> Approve/pause/delete any catalog clip, or inject a new MP4/HLS/YouTube clip directly into the live rotation.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>3. Supabase Cloud Persistence &amp; Instant Server Cache Invalidation</h3>
+        <p>
+          Configured for the live Supabase cloud instance (<code>ylinzijawuzvnkzucoxf.supabase.co</code>) with full service-role bypass and client RLS:
+        </p>
+        <ul>
+          <li><strong>Direct Cloud Sync:</strong> All article creations, updates, broadcast approvals, and media uploads write synchronously to Supabase PostgreSQL (<code>newspaper_articles</code>, <code>video_catalog</code>) with automatic fallback to local JSON storage (<code>data/newspaper-store.json</code>) during offline development.</li>
+          <li><strong>Instant Cache Invalidation (<code>invalidateArticlesServerCache()</code>):</strong> In Next.js 16, statically generated and ISR routes can cache API responses. Whenever an admin creates or edits an article in <code>/admin</code>, the backend triggers an explicit server-cache invalidation hook that clears internal article caches, allowing newly published dispatches to appear instantly across the live Vercel production deployment without requiring a rebuild.</li>
+          <li><strong>Groq AI Engine Ingestion:</strong> The article schema emitted by <code>scripts/groq_article_engine.py</code> conforms strictly to the exact TypeScript interface required by <code>AdminNewsroomView.tsx</code>, allowing seamless copy-paste or automated programmatic ingestion of AI drafts directly into the publishing queue.</li>
+        </ul>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 09: 20-PLATFORM VIDEO & PHOTO SCRAPER PIPELINE
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-9">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 09</span>
+            <span class="section-title">20-Platform Video &amp; Photo Aggregation Pipeline</span>
+          </div>
+          <span class="section-tag">Serverless Node Scraper + Python FFmpeg pHash Worker</span>
+        </div>
+
+        <p>
+          Leonida Vice uses a <strong>Dual-Engine Scraping Architecture</strong> so that fresh clips and photos can be ingested both instantaneously from the Vercel serverless runtime (via <code>/admin</code> or Vercel Cron) and deeply via the containerized Python + FFmpeg GitHub Actions worker:
+        </p>
+
+        <div class="grid-2">
+          <div class="subcard">
+            <div class="subcard-title">Engine 1: Built-In Node Serverless Scraper (Zero External Deps)</div>
+            <p><strong>Location:</strong> <code>app/api/admin/videos/route.ts</code> &amp; <code>app/api/cron/aggregate/route.ts</code></p>
+            <ul>
+              <li>Executes directly inside Next.js / Vercel Node runtime in 3–8 seconds.</li>
+              <li><strong>Sources:</strong>
+                <ol>
+                  <li><strong>Reddit <code>r/GTA6</code> &amp; <code>r/GTA</code> JSON API:</strong> Extracts native <code>v.redd.it</code> progressive MP4s (<code>fallback_url</code>) and HLS <code>.m3u8</code> manifests.</li>
+                  <li><strong>Internet Archive (<code>archive.org/advancedsearch.php</code>):</strong> Queries <code>gta 6</code> / <code>grand theft auto vi</code> MP4 items and resolves direct <code>archive.org/download/&lt;id&gt;/&lt;file&gt;.mp4</code> streams.</li>
+                  <li><strong>Dailymotion Public API:</strong> Fetches verified GTA VI video clips &amp; metadata.</li>
+                  <li><strong>Official Rockstar / Curated High-Res Fallback Pool:</strong> Ensures the catalog is never empty.</li>
+                </ol>
+              </li>
+              <li>Applies strict English-title validation (<code>isEnglishTitle</code>), GTA VI keyword matching (<code>GTA6_KEYWORD_REGEX</code>), and clickbait rejection (<code>REJECT_CLICKBAIT_REGEX</code>).</li>
+            </ul>
+          </div>
+
+          <div class="subcard">
+            <div class="subcard-title">Engine 2: 20-Platform Python + FFmpeg pHash Crawler</div>
+            <p><strong>Location:</strong> <code>crawler/*.py</code> &amp; <code>.github/workflows/crawler-worker.yml</code></p>
+            <ul>
+              <li>Runs automatically every 6 hours on GitHub Actions (<code>0 */6 * * *</code>) or via <code>python -m crawler.run_all</code>.</li>
+              <li><strong>20 Dedicated Platform Fetchers:</strong> Internet Archive, Streamable, Medal.tv, Reddit, Imgur, Coub, PeerTube, Odysee, VK Video, NicoNico, Bilibili, Bilibili Global, SOOP Live, Rumble, Kick, Dailymotion, Vimeo, BitChute, X/Twitter, and ModSites.</li>
+              <li><strong>64-Bit DCT Perceptual Hashing (<code>crawler/perceptual_hash.py</code>):</strong> Uses FFmpeg to sample a 3×3 storyboard grid at 1 fps and computes a 64-bit Discrete Cosine Transform (DCT) perceptual hash. Re-uploads across platforms with Hamming distance <code>≤ 10</code> are merged into <code>cross_platform_urls[]</code> and boost <code>viral_heat_score</code> instead of duplicating!</li>
+              <li><strong>Launch-Day Auto-Transition (<code>crawler/launch_day_transition.py</code>):</strong> Automatically switches query weights from pre-launch trailer/leak analysis to live gameplay clips on <code>GTA6_LAUNCH_DATE</code> (<code>2026-11-19T00:00:00Z</code>).</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 10: COMPLETE API ROUTE REFERENCE
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-10">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 10</span>
+            <span class="section-title">Complete API Route Reference (14 Endpoints)</span>
+          </div>
+          <span class="section-tag">Next.js App Router REST &amp; Streaming Contracts</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Endpoint Path</th>
+                <th>Methods</th>
+                <th>Auth / Security</th>
+                <th>Purpose, Request Payload &amp; Response Contract</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>/api/room/[slug]/sync</code></td>
+                <td><code>GET</code></td>
+                <td>Public (No-Store)</td>
+                <td><strong>Deterministic Room Broadcast Coordinator.</strong> Checks <code>getForcedBroadcastClip()</code> first; otherwise computes epoch-modulo active clip &amp; next clip from <code>video_catalog</code>. Returns <code>{ roomSlug, syncMode, serverNow, clipStartTimestamp, offsetSec, current, next }</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/video/stream</code></td>
+                <td><code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code></td>
+                <td>Public + Host Whitelist + SSRF Guard</td>
+                <td><strong>CORS Byte-Range Video Proxy.</strong> Validates <code>?url=</code> against 20 whitelisted video hosts (blocks RFC 1918 / localhost / private IPs), forwards <code>Range</code> header, streams <code>206 Partial Content</code> MP4/WebM/HLS with <code>Access-Control-Allow-Origin: *</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/video/next</code></td>
+                <td><code>GET</code></td>
+                <td>Public + Session ID</td>
+                <td><strong>Standalone Queue Selector.</strong> Returns next unplayed <code>VideoItem</code> for a given <code>?session=</code> ID, recording play history in <code>video_session_plays</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/video/submit</code></td>
+                <td><code>POST</code></td>
+                <td>Rate-Limited (3 / 10min per IP)</td>
+                <td><strong>Community Clip Submission.</strong> Accepts <code>{ url, title, creatorHandle, category, scoutUserId, scoutName }</code> across 20 supported platforms, resolves direct stream or YouTube ID, and inserts into <code>video_catalog</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/chat</code></td>
+                <td><code>GET</code>, <code>POST</code></td>
+                <td>Public GET / Rate-Limited POST</td>
+                <td><strong>Citizen Wire Chat API.</strong> <code>GET ?room=main-theater</code> returns latest 50 messages; <code>POST</code> runs profanity/link moderation (<code>lib/moderation/filter.ts</code>) and inserts into Supabase <code>messages</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/rooms</code></td>
+                <td><code>GET</code></td>
+                <td>Public</td>
+                <td>Returns active drive-in theater rooms from Supabase <code>public.rooms</code> (defaults to <code>main-theater</code>).</td>
+              </tr>
+              <tr>
+                <td><code>/api/articles</code></td>
+                <td><code>GET</code></td>
+                <td>Public</td>
+                <td>Returns merged published articles (52 built-ins + custom/edited articles from <code>data/newspaper-store.json</code> and Supabase <code>newspaper_articles</code>) ordered by <code>orderArticlesForNewspaper()</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/admin/auth</code></td>
+                <td><code>GET</code>, <code>POST</code>, <code>DELETE</code></td>
+                <td>Passcode / Cookie / Supabase Admin</td>
+                <td><code>GET</code> checks session status; <code>POST { passcode }</code> sets signed HttpOnly cookie <code>lv_admin_token</code>; <code>DELETE</code> clears cookie on logout.</td>
+              </tr>
+              <tr>
+                <td><code>/api/admin/articles</code></td>
+                <td><code>GET</code>, <code>POST</code>, <code>DELETE</code></td>
+                <td><code>verifyAdminRequest</code></td>
+                <td><code>GET</code> lists all articles + store diagnostics; <code>POST</code> creates/updates an article (dual-writes local JSON + Supabase <code>newspaper_articles</code>); <code>DELETE ?slug=</code> removes custom article or resets built-in override.</td>
+              </tr>
+              <tr>
+                <td><code>/api/admin/media</code></td>
+                <td><code>GET</code>, <code>POST</code></td>
+                <td><code>verifyAdminRequest</code></td>
+                <td><code>GET</code> lists all curated + uploaded + Supabase Storage images; <code>POST { action: "scrape", query }</code> scrapes Wikimedia/Reddit/Archive photos; <code>POST { action: "import-url", imageUrl }</code> downloads &amp; stores a remote image.</td>
+              </tr>
+              <tr>
+                <td><code>/api/admin/upload</code></td>
+                <td><code>POST</code></td>
+                <td><code>verifyAdminRequest</code></td>
+                <td>Accepts <code>multipart/form-data</code> image file (up to 12MB), sanitizes filename, saves to <code>public/images/uploads/</code> and uploads to Supabase Storage <code>article-images</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/admin/videos</code></td>
+                <td><code>GET</code>, <code>POST</code>, <code>PATCH</code>, <code>DELETE</code></td>
+                <td><code>verifyAdminRequest</code></td>
+                <td><strong>Broadcast &amp; Scraper Controller.</strong> <code>GET</code> returns catalog + forced clip + <code>aggregator_runs</code>; <code>POST { action: "scrape" | "force-play" | "add-manual" }</code> runs scraper, forces immediate global playback, or adds clip; <code>PATCH</code> toggles active/approved; <code>DELETE</code> removes clip.</td>
+              </tr>
+              <tr>
+                <td><code>/api/cron/aggregate</code></td>
+                <td><code>GET</code>, <code>POST</code></td>
+                <td><code>CRON_SECRET</code> or Admin</td>
+                <td><strong>Daily Vercel Cron (00:00 UTC).</strong> Executes the multi-platform GTA 6 video scraper and logs metrics to <code>aggregator_runs</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/api/cron/refresh</code></td>
+                <td><code>GET</code>, <code>POST</code></td>
+                <td><code>CRON_SECRET</code> or Admin</td>
+                <td><strong>Midday Vercel Cron (12:00 UTC).</strong> Checks expiring HLS manifests in <code>video_catalog</code> and triggers webhook/crawler refresh.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 11: DATABASE SCHEMA & HYBRID STORAGE
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-11">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 11</span>
+            <span class="section-title">Database Schema (Supabase PostgreSQL) &amp; Hybrid Storage</span>
+          </div>
+          <span class="section-tag">8 Tables + Storage Bucket + Local JSON Store</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Table / Store</th>
+                <th>Primary Key</th>
+                <th>Key Columns &amp; Types</th>
+                <th>RLS Policy &amp; Access Pattern</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>public.video_catalog</code></td>
+                <td><code>id TEXT</code></td>
+                <td><code>source_platform</code>, <code>canonical_url</code>, <code>youtube_id</code>, <code>manifest_url</code>, <code>direct_mp4_url</code>, <code>title</code>, <code>creator_name</code>, <code>duration_sec</code>, <code>is_approved</code>, <code>is_active</code>, <code>play_count</code>, <code>perceptual_hash</code>, <code>viral_heat_score</code>, <code>cross_platform_urls[]</code>, <code>high_beam_count</code></td>
+                <td>Public <code>SELECT</code> where <code>is_active = true AND is_approved = true</code>; Service Role full CRUD.</td>
+              </tr>
+              <tr>
+                <td><code>public.newspaper_articles</code></td>
+                <td><code>slug TEXT</code></td>
+                <td><code>title</code>, <code>category</code>, <code>author</code>, <code>date</code>, <code>image</code>, <code>excerpt</code>, <code>read_mins</code>, <code>tags TEXT[]</code>, <code>body JSONB</code>, <code>preset</code>, <code>status</code>, <code>featured_rank INT</code>, <code>kicker</code>, <code>updated_at</code></td>
+                <td>Public <code>SELECT</code> where <code>status = 'published'</code>; Service Role upserts/deletes via <code>lib/newspaper/store.server.ts</code>.</td>
+              </tr>
+              <tr>
+                <td><code>public.room_playback_state</code></td>
+                <td><code>room_slug TEXT</code></td>
+                <td><code>current_video_id</code>, <code>next_video_id</code>, <code>clip_start_ms BIGINT</code>, <code>high_beam_count</code>, <code>hazard_count</code>, <code>occupied_vehicles</code>, <code>updated_at</code></td>
+                <td>Public <code>SELECT</code>; written by PartyServer Durable Object 30s alarm checkpoints.</td>
+              </tr>
+              <tr>
+                <td><code>public.video_session_plays</code></td>
+                <td><code>(session_id, video_id)</code></td>
+                <td><code>session_id TEXT</code>, <code>video_id TEXT</code>, <code>played_at TIMESTAMPTZ</code></td>
+                <td>Public <code>SELECT</code> &amp; <code>INSERT</code> (prevents duplicate clip playback within a standalone session).</td>
+              </tr>
+              <tr>
+                <td><code>public.aggregator_runs</code></td>
+                <td><code>id UUID</code></td>
+                <td><code>run_at</code>, <code>sources_crawled</code>, <code>videos_found</code>, <code>videos_added</code>, <code>videos_rejected</code>, <code>error_log</code></td>
+                <td>Service Role only; displayed in <code>/admin</code> Broadcast &amp; Scraper tab.</td>
+              </tr>
+              <tr>
+                <td><code>public.profiles</code></td>
+                <td><code>id UUID</code></td>
+                <td><code>username UNIQUE</code>, <code>avatar_url</code>, <code>vehicle_badge</code>, <code>badge_color</code>, <code>role ('viewer'|'moderator'|'admin')</code>, <code>is_shadowbanned</code></td>
+                <td>Auto-created via trigger <code>on_auth_user_created</code>; users can update own profile except <code>role</code> / <code>is_shadowbanned</code>.</td>
+              </tr>
+              <tr>
+                <td><code>public.rooms</code></td>
+                <td><code>id UUID</code></td>
+                <td><code>slug UNIQUE</code> (<code>'main-theater'</code>), <code>title</code>, <code>current_video_id</code>, <code>is_active</code>, <code>max_capacity</code></td>
+                <td>Public <code>SELECT</code>.</td>
+              </tr>
+              <tr>
+                <td><code>public.messages</code></td>
+                <td><code>id UUID</code></td>
+                <td><code>room_id UUID</code>, <code>user_id UUID</code>, <code>content TEXT (&lt;=500)</code>, <code>is_announcement</code>, <code>is_flagged</code>, <code>created_at</code></td>
+                <td>Public <code>SELECT</code>; authenticated or service-role <code>INSERT</code> via <code>/api/chat</code>.</td>
+              </tr>
+              <tr>
+                <td><code>data/newspaper-store.json</code></td>
+                <td><code>articles[slug]</code></td>
+                <td><code>{ version: 1, updatedAt: string, articles: Record&lt;string, Article&gt;, deletedSlugs: string[] }</code></td>
+                <td>Local filesystem JSON store synced alongside Supabase <code>newspaper_articles</code> so edits work both offline and on Vercel cloud.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 12: MULTI-MODEL GROQ LPU AI TEAM & PLAYWRIGHT WATCHDOG
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-12">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 12</span>
+            <span class="section-title">Multi-Model Groq LPU AI Team &amp; Playwright Reliability Watchdog</span>
+          </div>
+          <span class="section-tag">LPU Inference Cloud • Strict JSON Schema • Automated Video &amp; DOM QA</span>
+        </div>
+
+        <p>
+          Derived from the <em>Groq AI Team Setup Guide</em>, Leonida Vice features a high-throughput, low-cost autonomous AI editorial engine and deterministic site reliability watchdog running on Groq's Language Processing Unit (LPU) cloud inference hardware. It replaces the legacy <code>groq serup.txt</code> blueprint (which relied on deprecated OpenAI models and truncated verification loops) with open-weight models optimized for extreme speed and ultra-low cost.
+        </p>
+
+        <h3>1. Multi-Model Task Distribution &amp; Token Economics</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Operational Role</th>
+                <th>Assigned Model</th>
+                <th>Pricing (In / Out per 1M)</th>
+                <th>Context / Max Out</th>
+                <th>Architecture &amp; CMS Responsibilities</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Long-Form Article Engine</strong></td>
+                <td><code>openai/gpt-oss-120b</code></td>
+                <td>$0.15 / $0.60</td>
+                <td>131,072 / 65,536</td>
+                <td>Drafts 1,400–2,000-word investigative SEO articles synthesizing platform lore, competitor leaks, and RAGE 9 tech in a single ~500 tok/sec call.</td>
+              </tr>
+              <tr>
+                <td><strong>Short-Form &amp; CMS Formatter</strong></td>
+                <td><code>openai/gpt-oss-20b</code></td>
+                <td>$0.075 / $0.30</td>
+                <td>131,072 / 65,536</td>
+                <td>Generates 350–500-word news briefs and bullet summaries with <strong>Strict Mode (<code>strict: true</code>)</strong> structured outputs directly matching <code>AdminNewsroomView.tsx</code>.</td>
+              </tr>
+              <tr>
+                <td><strong>Watchdog Log &amp; Content QA</strong></td>
+                <td><code>llama-3.1-8b-instant</code> / <code>gpt-oss-20b</code></td>
+                <td>$0.05 / $0.08</td>
+                <td>131,072 / 131,072</td>
+                <td>High-speed proofreader scanning distilled DOM text for typographical errors, lore contradictions, and unrendered template placeholders (&lt;$0.01/mo).</td>
+              </tr>
+              <tr>
+                <td><strong>Clip Safety Guardrail</strong></td>
+                <td><code>openai/gpt-oss-safeguard-20b</code></td>
+                <td>$0.075 / $0.30</td>
+                <td>131,072 / 65,536</td>
+                <td>Screens user submissions from <code>SubmitClipModal.tsx</code> for policy compliance before queuing into the broadcast tab.</td>
+              </tr>
+              <tr>
+                <td><strong>Audio Transcription</strong></td>
+                <td><code>whisper-large-v3-turbo</code></td>
+                <td>$0.04 / hour</td>
+                <td>Audio Duration</td>
+                <td>Transcribes community video clips to automatically generate searchable show notes and companion summaries.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="subcard">
+            <div class="subcard-title">Prompt Caching &amp; Batch API Discounts</div>
+            <ul>
+              <li><strong>50% Prompt Caching:</strong> Placing static editorial mandates and canonical entities at the beginning of the system prompt triggers Groq's automatic 50% discount on cached input tokens for all subsequent requests.</li>
+              <li><strong>50% Batch API:</strong> Nightly full-site consistency sweeps utilize asynchronous <code>.jsonl</code> batch files processed within 24 hours at a flat 50% discount off both input and output tokens.</li>
+              <li><strong>Projected Monthly Spend:</strong> 3 long articles/day + 6 short posts/day + 4 watchdog runs/day + nightly sweeps = <strong>$0.59 to $0.83 / month</strong> total.</li>
+              <li><strong>Spend Circuit Breaker:</strong> A hard monthly ceiling of <strong>$5.00</strong> in the Groq Console prevents runaway cron loops.</li>
+            </ul>
+          </div>
+          <div class="subcard">
+            <div class="subcard-title">Local Canonical Lore Retrieval (Zero-Cost Vector DB)</div>
+            <ul>
+              <li>Stored locally in <code>scripts/canonical_facts.json</code> (&lt;500 tokens), eliminating $50–$100+/mo managed Pinecone or Qdrant cluster fees.</li>
+              <li>Injects canonical ground-truth facts for characters (Lucia Caminos, Jason Duval, Raul Bautista), locations (Leonida Keys, Mount Kalaga, Port Gellhorn, Vice City), and RAGE 9 tech.</li>
+              <li>Guarantees factual consistency without vector embedding latency or full-corpus context stuffing.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>2. Multi-Model Article Generation Engine (<code>scripts/groq_article_engine.py</code>)</h3>
+        <p>
+          The production Python engine enforces compile-time and runtime validation matching the <code>AdminNewsroomView.tsx</code> schema:
+        </p>
+        <pre><code># Execution Example:
+python scripts/groq_article_engine.py \
+  --topic "Lucia Caminos Combat Tactics and RAGE 9 Physics" \
+  --tier short \
+  --keywords "Lucia Caminos, RAGE 9, Vice City, physics engine" \
+  --output "scratch/generated_dispatch.json"</code></pre>
+        <ul>
+          <li><strong>Strict JSON Schema:</strong> Mandates <code>headline</code> (&le;60 chars), <code>slug</code> (kebab-case), <code>meta_description</code> (120–155 chars), <code>category</code> (enum), <code>summary_bullets</code> (3 items), <code>body_markdown</code> (H2/H3 headers), and <code>primary_keywords_used</code> with <code>additionalProperties: false</code>.</li>
+          <li><strong>Deterministic Post-Processing:</strong> Automatically asserts headline length, calculates reading time (225 words/min), verifies target keyword coverage, and normalizes category names.</li>
+        </ul>
+
+        <h3>3. Playwright Reliability &amp; Editorial Watchdog (<code>scripts/newvice_watchdog.py</code>)</h3>
+        <p>
+          To replace broken screenshot-only tests, the watchdog launches headless Chromium with <code>--autoplay-policy=no-user-gesture-required</code> and inspects the live platform:
+        </p>
+        <pre><code># Run complete automated audit against production:
+python scripts/newvice_watchdog.py --url https://newvice.vercel.app</code></pre>
+        <ul>
+          <li><strong>HTML5 Video State Machine Audit:</strong> Asserts <code>readyState = 4 (HAVE_ENOUGH_DATA)</code>, <code>!video.paused</code>, <code>!video.ended</code>, and samples playhead progression over a 3.0s window (<code>currentTime(t1) &gt; currentTime(t0)</code>) across the active A/B video slot.</li>
+          <li><strong>Broadcast Queue Rotation:</strong> Triggers queue advancement and confirms that <code>rotatedSrc !== initialSrc</code> without decoding hangs.</li>
+          <li><strong>Asset &amp; Link Integrity:</strong> Asynchronously audits all <code>&lt;img&gt;</code> and <code>&lt;a&gt;</code> elements via <code>httpx</code>, eliminating 404 broken links or failed CDN images.</li>
+          <li><strong>Anti-Rate-Limit DOM Distillation:</strong> Compresses a 100,000-token raw React DOM down to an 800–1,500-token payload before calling Groq LPU, protecting the organization's 250k–300k TPM quota and eliminating needle-in-a-haystack attention dilution.</li>
+          <li><strong>Audit Persistence &amp; Alerting:</strong> Writes all audit assertions and severity ratings to local SQLite (<code>scripts/newvice_watchdog_audit.db</code>) with optional Slack webhook dispatch.</li>
+        </ul>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 13: EXHAUSTIVE FILE & MODULE MAP
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-13">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 13</span>
+            <span class="section-title">Exhaustive Repository File &amp; Module Map</span>
+          </div>
+          <span class="section-tag">Every Key File &amp; Its Responsibility</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>File Path (relative to <code>leonida-vice/</code>)</th>
+                <th>Layer</th>
+                <th>Detailed Responsibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>app/layout.tsx</code></td><td>App Router</td><td>Root HTML shell; imports Google Fonts (<code>Newsreader:ital,opsz,wght@0,6..72</code>, <code>DM+Sans:ital,opsz,wght@0,9..40</code>, <code>DM+Mono</code>, <code>Big Shoulders Inline Text</code>), executes zero-flash <code>THEME_INIT_SCRIPT</code> with <code>?edition=night|day</code> override, and mounts <code>RouteProgressBar</code>.</td></tr>
+              <tr><td><code>app/globals.css</code></td><td>Styling</td><td>Layer 1 Primitive &amp; Layer 2 Semantic Tokens (Palette 3), metric-matched fallback <code>@font-face</code> blocks (<code>Newsreader-Fallback</code> &amp; <code>DMSans-Fallback</code> for CLS = 0.00), and crisp 1px structural bounds.</td></tr>
+              <tr><td><code>components/RouteProgressBar.tsx</code></td><td>Navigation UX</td><td>Fixed top 2px route progress bar with burgundy-to-teal gradient glow (<code>#831843</code> &rarr; <code>#9F1239</code> &rarr; <code>#0F766E</code>) providing immediate tactile feedback during client page transitions.</td></tr>
+              <tr><td><code>app/page.tsx</code></td><td>App Router</td><td>Homepage route (<code>/</code>); renders <code>HomeClient</code>.</td></tr>
+              <tr><td><code>app/article/[slug]/page.tsx</code></td><td>App Router</td><td>Individual investigative article page with X-Ray video timestamp jump triggers, related articles, and comments.</td></tr>
+              <tr><td><code>app/category/[slug]/page.tsx</code></td><td>App Router</td><td>Category archive page for all 10 editorial categories (with subcategory pills &amp; pagination).</td></tr>
+              <tr><td><code>app/author/[slug]/page.tsx</code></td><td>App Router</td><td>Staff writer dossier &amp; article archive (<code>marco-reyes</code>, <code>dani-flores</code>, <code>tyler-knox</code>).</td></tr>
+              <tr><td><code>app/tag/[slug]/page.tsx</code></td><td>App Router</td><td>Topic tag archive page (e.g., <code>/tag/lucia</code>, <code>/tag/rage-9</code>).</td></tr>
+              <tr><td><code>app/search/page.tsx</code></td><td>App Router</td><td>Full-text search across headlines, excerpts, tags, and article body blocks.</td></tr>
+              <tr><td><code>app/admin/page.tsx</code></td><td>App Router</td><td>Newsroom Admin Studio route (<code>/admin</code>); renders <code>AdminNewsroomView</code> with Supabase cloud persistence and instant cache invalidation.</td></tr>
+              <tr><td><code>app/about/page.tsx</code>, <code>app/contact/page.tsx</code>, <code>app/newsletter/page.tsx</code>, <code>app/pricing-plans/page.tsx</code>, <code>app/privacy-policy/page.tsx</code></td><td>App Router</td><td>Broadsheet static editorial &amp; membership pages rendered via <code>StaticPagesView.tsx</code>.</td></tr>
+              <tr><td><code>components/HomeClient.tsx</code></td><td>Client Orchestrator</td><td>Connects <code>useDriveInRoom</code>, <code>VideoEngine</code>, <code>useRealtimeChat</code>, <code>SubmitClipModal</code>, <code>AuthModal</code>, and <code>ProfileModal</code> into <code>UrbanObserverLayout</code>.</td></tr>
+              <tr><td><code>components/newspaper/NewspaperShell.tsx</code></td><td>Broadsheet UI</td><td>Shared header masthead, live viewer ticker, <code>☀️ DAY PAPER / 🌙 NIGHT WIRE</code> toggle, 7-category nav bar, search popover, and 4-column footer.</td></tr>
+              <tr><td><code>components/newspaper/paper.css</code></td><td>Design Tokens</td><td>All CSS custom properties for Palette 3 (Alabaster <code>#FAF9F6</code>, Carbon <code>#0A0A0A</code>, Burgundy <code>#831843</code>, Crimson <code>#9F1239</code>, Teal <code>#0F766E</code>/<code>#14B8A6</code>).</td></tr>
+              <tr><td><code>components/newspaper/UrbanObserverLayout.tsx</code></td><td>Broadsheet UI</td><td>12-section front-page layout hosting the Hero Broadcast Stage, Docked Broadcast Title Card, <code>XRayTelemetryDeck</code>, <code>DetachableCommandCenter</code>, Citizen Wire, and article grids.</td></tr>
+              <tr><td><code>components/newspaper/XRayTelemetryDeck.tsx</code></td><td>Stage 2 Video</td><td>Bi-directional X-Ray asset cards, 6-County Leonida SVG Radar Map, and Cue Sheet drawer.</td></tr>
+              <tr><td><code>components/newspaper/DetachableCommandCenter.tsx</code></td><td>Stage 3 Video</td><td>Scroll-triggered Sticky Corner Mini-Deck + Chromium <code>documentPictureInPicture</code> floating OS Command Center.</td></tr>
+              <tr><td><code>components/newspaper/AdminNewsroomView.tsx</code></td><td>Admin Studio</td><td>Full editorial CMS, block editor, 4-tab Media Library modal (with Photo Scraper &amp; URL Importer), Broadcast &amp; Scraper tab host, and Groq JSON ingestion.</td></tr>
+              <tr><td><code>components/newspaper/AdminBroadcastQueueTab.tsx</code></td><td>Admin Studio</td><td>Live video catalog manager, 1-click video scraper trigger, <code>▶ Force Play Now</code> controller, and manual clip adder.</td></tr>
+              <tr><td><code>components/video-engine/VideoEngine.tsx</code></td><td>Video Engine</td><td>Dynamic SSR-safe wrapper around <code>HTML5Player</code> and <code>NowPlaying</code>.</td></tr>
+              <tr><td><code>components/video-engine/HTML5Player.tsx</code></td><td>Video Engine</td><td>Dual-DOM <code>&lt;video&gt;</code> surface, hover control bar, interactive scrub timeline, <code>-1f/+1f</code> buttons, <code>⚡ LIVE SYNC</code> buttons, and <code>ForensicWorkbenchOverlay</code> host.</td></tr>
+              <tr><td><code>components/video-engine/hooks/useSeamlessPlayer.ts</code></td><td>Video Engine</td><td>Core playback state machine: Slot A/B pre-buffering, sequential queue advance failsafe, sub-50ms room clock drift alignment, VTTCue metadata track injection, and instant <code>resumeRoomSync</code>.</td></tr>
+              <tr><td><code>components/video-engine/ForensicWorkbenchOverlay.tsx</code></td><td>Stage 1 Video</td><td>800% zoom Canvas Loupe, frame stepper, bounding-box annotation tool, PNG frame capture, and 6-Frame Contact Sheet Storyboard generator.</td></tr>
+              <tr><td><code>components/video-engine/OfficialEmbedFallback.tsx</code></td><td>Video Engine</td><td>Privacy-enhanced <code>youtube-nocookie.com</code> / HTTPS iframe fallback for embed-only catalog items with <code>resyncNonce</code> support.</td></tr>
+              <tr><td><code>scripts/canonical_facts.json</code></td><td>Lore Database</td><td>Canonical ground-truth facts store (characters, locations, RAGE 9 tech) used by the Groq Article Engine as a zero-cost local vector DB replacement.</td></tr>
+              <tr><td><code>scripts/groq_article_engine.py</code></td><td>Groq AI Engine</td><td>Multi-model editorial generator: routes long-form articles to <code>openai/gpt-oss-120b</code> and short briefs to <code>openai/gpt-oss-20b</code> with <strong>Strict Mode (<code>strict: true</code>)</strong> structured outputs.</td></tr>
+              <tr><td><code>scripts/newvice_watchdog.py</code></td><td>QA Automation</td><td>Playwright site reliability watchdog: validates HTML5 media state machines (<code>readyState = 4</code>), queue rotation, 404 images/links, and distilled DOM proofreading.</td></tr>
+              <tr><td><code>scripts/newvice_watchdog_audit.db</code></td><td>Audit Store</td><td>SQLite audit database persisting automated watchdog test runs, error severity, and temporal telemetry.</td></tr>
+              <tr><td><code>lib/audio/DriveInAudioGraph.ts</code></td><td>Web Audio DSP</td><td>Singleton Web Audio graph: Slot A/B crossfade gains, Cabin FM filter, voice ducking, DynamicsCompressor, sub-bass FFT analyser, and 3D spatial horn synthesizer.</td></tr>
+              <tr><td><code>lib/video/catalog.ts</code></td><td>Video Catalog</td><td>Catalog row normalization, English title filter, Launch-Day mode filter, and in-memory <code>forcedBroadcastOverride</code> state.</td></tr>
+              <tr><td><code>lib/video/xray-telemetry.ts</code></td><td>X-Ray Engine</td><td>6 Leonida region pins, deterministic X-Ray cue generator, WebVTT serializer, <code>lv:seek-video</code> dispatcher, and <code>localStorage</code> forensic frame bridge.</td></tr>
+              <tr><td><code>lib/newspaper/store.server.ts</code></td><td>Hybrid Store</td><td>Server-side hybrid persistence merging built-in articles, <code>data/newspaper-store.json</code>, and Supabase <code>newspaper_articles</code> with explicit cache invalidation.</td></tr>
+              <tr><td><code>lib/newspaper/articles/*.ts</code></td><td>Editorial Seed</td><td>52 built-in long-form GTA VI articles across <code>trailers-media.ts</code>, <code>characters-story.ts</code>, <code>leaks-tech.ts</code>, and <code>leonida-vehicles.ts</code>.</td></tr>
+              <tr><td><code>party/src/server.ts</code></td><td>Edge Worker</td><td>Cloudflare PartyServer Durable Object room server + <code>/proxy-media</code> edge CORS proxy.</td></tr>
+              <tr><td><code>crawler/run_all.py</code> &amp; <code>crawler/*_fetcher.py</code></td><td>Python Crawler</td><td>20-platform video crawler orchestrator, FFmpeg 64-bit DCT perceptual hash deduplicator, and Supabase upserter.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 14: ENVIRONMENT VARIABLES & DEPLOYMENT RUNBOOK
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-14">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 14</span>
+            <span class="section-title">Environment Variables, Deployment &amp; Operations Runbook</span>
+          </div>
+          <span class="section-tag">Vercel • Supabase • Groq LPU • Playwright • GitHub Actions</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Variable Name</th>
+                <th>Required?</th>
+                <th>Scope</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>GROQ_API_KEY</code></td><td><strong>Required (AI)</strong></td><td>Python Scripts</td><td>Groq LPU API key powering <code>openai/gpt-oss-120b</code>, <code>openai/gpt-oss-20b</code>, and the Playwright LLM watchdog.</td></tr>
+              <tr><td><code>SLACK_WEBHOOK_URL</code></td><td>Optional</td><td>Watchdog</td><td>Slack incoming webhook for automated site reliability and editorial alerts.</td></tr>
+              <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code></td><td><strong>Required</strong></td><td>Client + Server</td><td>Supabase project URL (e.g. <code>https://ylinzijawuzvnkzucoxf.supabase.co</code>).</td></tr>
+              <tr><td><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td><strong>Required</strong></td><td>Client + Server</td><td>Supabase public anonymous JWT key (RLS-enforced).</td></tr>
+              <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td><strong>Required</strong></td><td>Server Only</td><td>Supabase service_role key for admin writes, scraper upserts, and storage uploads.</td></tr>
+              <tr><td><code>ADMIN_PASSCODE</code></td><td>Recommended</td><td>Server Only</td><td>Passcode for <code>/admin</code> login (defaults to <code>leonida305</code> in local non-production dev).</td></tr>
+              <tr><td><code>NEXT_PUBLIC_PARTYSERVER_HOST</code></td><td>Optional</td><td>Client + Server</td><td>Cloudflare PartyServer host. When blank, app uses deterministic <code>/api/room/[slug]/sync</code> clock automatically.</td></tr>
+              <tr><td><code>CRON_SECRET</code></td><td>Optional</td><td>Server Only</td><td>Bearer secret used by Vercel Cron to authenticate <code>/api/cron/aggregate</code> and <code>/api/cron/refresh</code>.</td></tr>
+              <tr><td><code>GTA6_LAUNCH_DATE</code> / <code>GTA6_LAUNCH_MODE</code></td><td>Optional</td><td>Server + Crawler</td><td>Controls pre-launch vs post-launch video catalog filtering (default <code>2026-11-19T00:00:00Z</code> / <code>false</code>).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Common Operational Commands</h3>
+        <pre><code># 1. Start local development server (http://localhost:3000)
+cd leonida-vice
+npm run dev
+
+# 2. Type-check entire TypeScript codebase
+npx tsc --noEmit
+
+# 3. Production build check
+npm run build
+
+# 4. Deploy to Vercel (auto-triggered on push to origin/main)
+git push origin main
+
+# 5. Generate a short-form SEO article using Groq LPU (350-500 words, Strict JSON)
+python scripts/groq_article_engine.py --topic "Vice Beach Smuggling Corridors" --tier short
+
+# 6. Generate a long-form investigative article (1,400+ words, 120B model)
+python scripts/groq_article_engine.py --topic "Mount Kalaga Expeditions" --tier long
+
+# 7. Run automated Playwright site reliability & editorial watchdog
+python scripts/newvice_watchdog.py --url https://newvice.vercel.app
+
+# 8. Optional: Run 20-platform Python video crawler manually
+python -m crawler.run_all</code></pre>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           SECTION 15: READY-TO-PASTE AI HANDOFF PROMPT
+      ═════════════════════════════════════════════════════════════════════ -->
+      <section class="section-card searchable-section" id="sec-15">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SECTION 15</span>
+            <span class="section-title">Master AI Handoff Prompt (Copy &amp; Paste into Any AI)</span>
+          </div>
+          <button class="btn btn-accent no-print" onclick="copyAiPrompt()">📋 COPY PROMPT TO CLIPBOARD</button>
+        </div>
+
+        <p>
+          Click <strong>"📋 COPY PROMPT TO CLIPBOARD"</strong> above (or select the block below) and paste it into any AI assistant (Claude, ChatGPT, Gemini, Cursor, Windsurf, Antigravity) to give it complete, instant context on the entire Leonida Vice codebase:
+        </p>
+
+        <pre id="aiPromptBlock"><code># SYSTEM BRIEFING: LEONIDA VICE (v4.0) — ARCHITECTURAL HANDOFF FOR AI AGENTS
+
+You are working on **Leonida Vice** (`leonida-vice/`), deployed live at `https://newvice.vercel.app` (GitHub: `https://github.com/agayle8671-cmyk/newvice.git`, branch: `main`).
+
+## 1. PRODUCT OVERVIEW
+Leonida Vice is a hybrid **GTA VI Investigative Broadsheet Magazine &amp; 24/7 Synchronized Communal Broadcast Platform** built with **Next.js 16.4.3 (App Router)**, **React 19.3**, **TypeScript 5**, **Tailwind CSS v4**, **Supabase Cloud (PostgreSQL + Realtime + Storage)**, **Groq LPU AI Team**, and **Playwright Headless Reliability Watchdog**.
+
+It combines:
+1. **Urban Observer PRO Editorial Broadsheet:** 10 GTA VI categories (`trailers-media`, `trailers`, `radio-music`, `in-game-media`, `characters`, `leaks-rumors`, `story`, `leonida`, `tech-rage`, `vehicles-weapons`), 52 built-in articles (`lib/newspaper/articles/*.ts`) merged with dynamic Admin articles (`lib/newspaper/store.server.ts` -&gt; `data/newspaper-store.json` + Supabase `newspaper_articles` with instant cache invalidation), and a 1-click Dual-Edition theme toggle (`☀️ DAY PAPER` alabaster newsprint `#FAF9F6` vs `🌙 NIGHT WIRE` archival carbon `#0A0A0A` in `components/newspaper/paper.css` &amp; `NewspaperShell.tsx`).
+2. **Human-Authored Typographic Hierarchy &amp; Metric Fallbacks (CLS = 0.00):**
+   - **Newsreader** (`opsz 6..72`, `-0.015em`) for display headlines and H1/H2 titles.
+   - **DM Sans** (`opsz 9..40`, 400/600) for body copy, subheadings H3–H6, and UI elements.
+   - **DM Mono** (`tabular-nums`) for timecodes, telemetry, byline metadata, and frame counters.
+   - Metric-matched local `@font-face` fallbacks (Georgia `size-adjust: 103.50%` and Arial `size-adjust: 105.64%`) guaranteeing zero Cumulative Layout Shift.
+   - Top route progress bar (`components/RouteProgressBar.tsx`) with burgundy-to-teal gradient glow for zero-lag instant page transitions.
+3. **24/7 Synchronized Communal Broadcast Theater:** Every viewer watches the exact same GTA VI video clip at the exact same second via `lib/realtime/useDriveInRoom.ts` (supports both stateless deterministic server-clock `/api/room/[slug]/sync` and Cloudflare PartyServer Durable Objects `party/src/server.ts`) paired with a Dual-DOM `&lt;video&gt;` Slot A/Slot B engine (`components/video-engine/HTML5Player.tsx` + `components/video-engine/hooks/useSeamlessPlayer.ts`) with deterministic queue advance failsafes, `&lt;16ms` clip cuts, `&lt;50ms` drift control, and instant `⚡ LIVE SYNC` catch-up after pausing/scrubbing.
+4. **3-Stage Interactive Video Ecosystem:**
+   - **Stage 1 (`components/video-engine/ForensicWorkbenchOverlay.tsx`):** Full-screen `createPortal` 800% (`1x/2x/4x/8x`) Canvas Loupe, `-10f/-1f/+1f/+10f` frame stepper (`requestVideoFrameCallback`), bounding-box callout annotations, PNG frame capture, 6-Frame Contact Sheet Storyboard generator, and automatic sync into `/admin` via `localStorage["lv_forensic_draft_frames_v1"]`.
+   - **Stage 2 (`components/newspaper/XRayTelemetryDeck.tsx` + `lib/video/xray-telemetry.ts`):** Native `HTMLTrackElement (kind="metadata")` + `VTTCue` stream driving real-time Vehicle/Weapon/Character cards, Provenance Badges, interactive 6-County Leonida Radar SVG map (`VC-OB`, `VC-DT`, `LK-7M`, `GR-EV`, `PC-88`, `AM-IN`), and `.vtt` exporter.
+   - **Stage 3 (`components/newspaper/DetachableCommandCenter.tsx`):** Zero-reload DOM reparenting of `videoStageNodeRef` between the Hero Stage, scroll-triggered Sticky Corner Mini-Deck, and Chromium OS `window.documentPictureInPicture` floating window with live Citizen Wire chat.
+5. **Newsroom Admin Studio (`/admin` -&gt; `components/newspaper/AdminNewsroomView.tsx` &amp; `AdminBroadcastQueueTab.tsx`):**
+   - Protected by `lib/newspaper/admin-auth.ts` (`lv_admin_token` HMAC cookie, `x-admin-passcode` header, or Supabase Admin role).
+   - Includes Block-based Article Editor, 4-tab Media Library with **🔄 Scrape Fresh Hi-Res Photos** (`/api/admin/media`) &amp; PC upload (`/api/admin/upload`), and **📺 BROADCAST &amp; SCRAPER** tab (`/api/admin/videos`) with **🔄 Scrape Fresh Clips Now**, **▶ Force Play Now**, and manual clip addition.
+   - Synchronized with Supabase Cloud PostgreSQL with `invalidateArticlesServerCache()` hook for zero-delay live updates on Vercel.
+6. **Multi-Model Groq LPU Editorial Pipeline &amp; Playwright Watchdog:**
+   - `scripts/groq_article_engine.py`: Multi-model generator routing long-form articles to `openai/gpt-oss-120b` and short briefs to `openai/gpt-oss-20b` with **Strict Mode (`strict: true`)** JSON Schema, static brand prefix for 50% prompt caching, and zero-cost local canonical facts retrieval (`scripts/canonical_facts.json`).
+   - `scripts/newvice_watchdog.py`: Playwright headless Chromium reliability watchdog auditing HTML5 video state machines (`readyState = 4`), queue advance, 404 assets, and distilled DOM proofreading via Groq into local SQLite (`scripts/newvice_watchdog_audit.db`). Total monthly operating budget: **$0.59 to $0.83 / month**.
+
+## 2. CRITICAL ARCHITECTURAL INVARIANTS (DO NOT BREAK)
+- **Typographic Fallbacks &amp; Sizing:** Always preserve the `@font-face` metric overrides in `app/globals.css`. Ensure `h1, h2` use display serif Newsreader (`opsz 6..72`), while subheadings and body copy remain DM Sans 400/600 to prevent mobile stroke clogging. Keep DM Mono tabular for all timecodes and telemetry counters.
+- **Video Player Layering (`HTML5Player.tsx`):** Keep the bottom control bar anchored to `inset-x-0 bottom-0 z-40` (never `inset-0 z-40`) so it never blocks the top-right `⚡ LIVE RESYNC` / `🔬 FORENSIC LOUPE` pill (`z-[45]`) or video canvas clicks. Keep `<video>` elements set to `object-contain bg-black` and the Broadcast Title Card (`UrbanObserverLayout.tsx`) docked cleanly below the 16:9 frame (`mt-3`).
+- **Live Sync &amp; Forensic Hold (`useSeamlessPlayer.ts`):** When `isForensicHold` is `true` (user paused, stepped frames, or scrubbed), do not yank their active clip away on background room transitions—pre-buffer into the inactive `<video>` slot so clicking `⚡ LIVE SYNC` (`resumeRoomSync` / `lv:resume-live-sync` event) cuts or hard-seeks to `getSyncedOffsetSec()` in `&lt;16ms`.
+- **Web Audio CORS Safety (`DriveInAudioGraph.ts`):** `createMediaElementSource` is only attached when `video.crossOrigin === "anonymous"` so non-CORS direct fallback streams never go silent. Always route volume/mute updates through `applyVolumeToActiveElement()`.
+- **Window Event Bus Signals:**
+  - `lv:seek-video` -&gt; `{ timestampSec, regionId, autoPauseForensic }`
+  - `lv:resume-live-sync` -&gt; triggers `resumeRoomSync()`
+  - `lv:toggle-forensic-loupe` -&gt; toggles `ForensicWorkbenchOverlay`
+  - `lv:toggle-document-pip` -&gt; toggles OS Document PiP / Sticky Mini-Deck
+  - `lv:forensic-frames-updated` -&gt; notifies `/admin` of new captured storyboard frames
+
+## 3. KEY API ENDPOINTS
+- `GET /api/room/[slug]/sync` — Authoritative room sync clock &amp; forced-clip override
+- `GET /api/video/stream?url=...` — SSRF-guarded byte-range CORS video proxy
+- `POST /api/video/submit` — Community clip submission
+- `GET|POST /api/chat` — Citizen Wire real-time chat persistence &amp; moderation
+- `GET /api/articles` — Merged published newspaper articles
+- `GET|POST|DELETE /api/admin/auth` — Admin passcode/cookie session endpoint
+- `GET|POST|DELETE /api/admin/articles` — Hybrid JSON + Supabase article CRUD
+- `GET|POST /api/admin/media` &amp; `POST /api/admin/upload` — Photo scraper, URL importer &amp; file upload
+- `GET|POST|PATCH|DELETE /api/admin/videos` — Broadcast queue manager, built-in video scraper &amp; Force-Play override
+- `GET|POST /api/cron/aggregate` &amp; `/api/cron/refresh` — Automated daily Vercel Cron jobs</code></pre>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       MACHINE-READABLE JSON ARCHITECTURAL MANIFEST (FOR AI PARSERS)
+  ═════════════════════════════════════════════════════════════════════════ -->
+  <script id="ai-machine-readable-manifest" type="application/json">
+  {
+    "project": "Leonida Vice",
+    "version": "4.0.0",
+    "liveUrl": "https://newvice.vercel.app",
+    "repository": "https://github.com/agayle8671-cmyk/newvice.git",
+    "workspaceSubdir": "leonida-vice",
+    "stack": {
+      "framework": "Next.js 16.4.3 (App Router)",
+      "react": "19.3.0",
+      "typescript": "5.x",
+      "styling": "Tailwind CSS v4 + components/newspaper/paper.css + app/globals.css",
+      "typography": {
+        "display": "Newsreader (opsz 6..72)",
+        "body": "DM Sans (opsz 9..40)",
+        "telemetry": "DM Mono (tabular-nums)",
+        "metricFallbacks": "Newsreader-Fallback (Georgia) + DMSans-Fallback (Arial) (CLS = 0.00)"
+      },
+      "colorSystem": "Palette 3 (Archival Carbon #0A0A0A, Alabaster #FAF9F6, Burgundy #831843/#9F1239, Teal #0F766E/#14B8A6)",
+      "database": "Supabase PostgreSQL Cloud (ylinzijawuzvnkzucoxf) + Storage (article-images) + data/newspaper-store.json fallback",
+      "aiEngine": "Groq LPU (openai/gpt-oss-120b & openai/gpt-oss-20b with Strict JSON schema and 50% Prompt Caching)",
+      "watchdog": "Playwright Chromium Headless (--autoplay-policy) + httpx + SQLite (scripts/newvice_watchdog_audit.db)",
+      "edgeCoordinator": "Cloudflare PartyServer Durable Objects (party/src/server.ts) + /api/room/[slug]/sync deterministic server clock",
+      "videoEngine": "Dual-DOM HTML5 <video> (Slot A/B) + hls.js 1.7.4 + Web Audio API DriveInAudioGraph + auto-advance recovery"
+    },
+    "customEvents": [
+      "lv:seek-video",
+      "lv:resume-live-sync",
+      "lv:toggle-forensic-loupe",
+      "lv:toggle-document-pip",
+      "lv:forensic-frames-updated"
+    ],
+    "routes": {
+      "pages": [
+        "/",
+        "/article/[slug]",
+        "/category/[slug]",
+        "/author/[slug]",
+        "/tag/[slug]",
+        "/search",
+        "/admin",
+        "/room/[slug]",
+        "/about",
+        "/contact",
+        "/newsletter",
+        "/pricing-plans",
+        "/privacy-policy"
+      ],
+      "api": [
+        "/api/room/[slug]/sync",
+        "/api/video/stream",
+        "/api/video/next",
+        "/api/video/submit",
+        "/api/chat",
+        "/api/rooms",
+        "/api/articles",
+        "/api/admin/auth",
+        "/api/admin/articles",
+        "/api/admin/media",
+        "/api/admin/upload",
+        "/api/admin/videos",
+        "/api/cron/aggregate",
+        "/api/cron/refresh"
+      ]
+    },
+    "databaseTables": [
+      "public.video_catalog",
+      "public.newspaper_articles",
+      "public.room_playback_state",
+      "public.video_session_plays",
+      "public.aggregator_runs",
+      "public.profiles",
+      "public.rooms",
+      "public.messages"
+    ]
+  }
+  </script>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const next = html.getAttribute("data-theme") === "night" ? "day" : "night";
+      html.setAttribute("data-theme", next);
+      const btn = document.getElementById("themeBtn");
+      btn.textContent = next === "night" ? "☀️ DAY PAPER" : "🌙 NIGHT WIRE";
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById("copyToast");
+      t.textContent = msg;
+      t.style.display = "block";
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        t.style.display = "none";
+      }, 3000);
+    }
+
+    function copyAiPrompt() {
+      const text = document.getElementById("aiPromptBlock").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("✓ MASTER AI HANDOFF PROMPT COPIED TO CLIPBOARD!");
+      });
+    }
+
+    function copyJsonManifest() {
+      const text = document.getElementById("ai-machine-readable-manifest").textContent.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("✓ MACHINE-READABLE JSON MANIFEST COPIED!");
+      });
+    }
+
+    function filterReport(query) {
+      const q = (query || "").trim().toLowerCase();
+      const sections = document.querySelectorAll(".searchable-section");
+      sections.forEach((sec) => {
+        if (!q) {
+          sec.style.display = "";
+          return;
+        }
+        const match = sec.innerText.toLowerCase().includes(q);
+        sec.style.display = match ? "" : "none";
+      });
+    }
+  </script>
+</body>
+</html>
