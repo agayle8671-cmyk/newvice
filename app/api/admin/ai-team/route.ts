@@ -154,6 +154,61 @@ export async function POST(request: NextRequest) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // ACTION: DYNAMIC INTELLIGENCE WIRE RECON (Lexi 20B scouts 6 fresh leads)
+    // ──────────────────────────────────────────────────────────────────────────
+    if (action === "scout_leads") {
+      const scoutPrompt = `You are Lexi 'Wire' Sterling, Breaking News Specialist for Leonida Vice.
+Scout 6 fresh, diverse, high-priority investigative story leads across the State of Leonida and Grand Theft Auto VI canon.
+Cover different counties and themes:
+1. Vice City metropolitan crime, luxury yachts, or municipal corruption
+2. Port Gellhorn industrial shipping, intermodal smuggling, or chop-shops
+3. Kelly County or Grassrivers swamp outlaws, mud-boggers, or wildlife
+4. Ambrosia rural agricultural belt or sugar cane cartels
+5. RAGE 9 engine tech, ray-tracing, physics, or simulation forensics
+6. Jason Duval & Lucia Caminos heist strategy or Keys criminal syndicates
+
+Return ONLY a valid JSON object:
+{
+  "leads": [
+    {
+      "id": "lead-unique-id",
+      "topic": "Compelling Investigative Headline",
+      "category": "Story & Campaign",
+      "tag": "Crime Syndicate",
+      "readMins": "4 Min Feature",
+      "summary": "2-sentence punchy investigative synopsis.",
+      "icon": "🌴"
+    }
+  ]
+}`;
+
+      const scoutResult = await callGroqJson(
+        groqApiKey,
+        "openai/gpt-oss-20b",
+        STATIC_BRAND_PREFIX,
+        scoutPrompt,
+        2500
+      );
+
+      const leads = Array.isArray(scoutResult.leads) && scoutResult.leads.length > 0
+        ? scoutResult.leads.map((l: any, idx: number) => ({
+            id: `lead-${Date.now()}-${idx}`,
+            topic: String(l.topic || "Leonida Investigative Dispatch").slice(0, 80),
+            category: String(l.category || "Story & Campaign"),
+            tag: String(l.tag || "Investigative Lead"),
+            readMins: String(l.readMins || "4 Min Feature"),
+            summary: String(l.summary || "Wire intercept logged by Lexi Sterling."),
+            icon: String(l.icon || "⚡"),
+          }))
+        : [];
+
+      return NextResponse.json({
+        success: true,
+        leads,
+      });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // ACTION: AUTONOMOUS REVIEW BOARD (4-Agent Consensus Pipeline -> Saves as DRAFT)
     // ──────────────────────────────────────────────────────────────────────────
     if (action === "board_draft") {

@@ -64,7 +64,7 @@ interface IntelligenceLead {
   icon: string;
 }
 
-const SCOUTED_LEADS: IntelligenceLead[] = [
+const MASTER_SCOUTED_LEADS: IntelligenceLead[] = [
   {
     id: "lead-1",
     topic: "Vice Beach Marina Yacht Heists & Narcotics Smuggling",
@@ -119,6 +119,114 @@ const SCOUTED_LEADS: IntelligenceLead[] = [
     summary: "Security vault acoustic sensors, guard shift rotation blindspots, and synchronized getaway corridors mapped across downtown Vice City.",
     icon: "🏦",
   },
+  {
+    id: "lead-7",
+    topic: "Vice City Metro Transit Ray-Traced Subsurface Tunnels",
+    category: "Tech & RAGE",
+    tag: "RTGI Lighting",
+    readMins: "5 Min Feature",
+    summary: "Subway lighting pipelines in RAGE 9: bounce lighting off tiled platforms, wet tunnel puddles, and aerodynamic subway noise simulation.",
+    icon: "🚇",
+  },
+  {
+    id: "lead-8",
+    topic: "Leonida Wildlife Department Alligator Aggression Telemetry",
+    category: "Leonida",
+    tag: "Predator AI",
+    readMins: "4 Min Feature",
+    summary: "Predator pathfinding in shallow marshlands, suburban pool incursions, territorial defense mechanics, and food-chain simulations.",
+    icon: "🐊",
+  },
+  {
+    id: "lead-9",
+    topic: "Starfish Island Celebrity Villa Burglary Wave & Security Leaks",
+    category: "Story & Campaign",
+    tag: "Luxury Crime",
+    readMins: "5 Min Feature",
+    summary: "High-profile mansions stripped of jewelry and untraceablebearer bonds; leaked private security codes traced to corrupt marine patrols.",
+    icon: "💎",
+  },
+  {
+    id: "lead-10",
+    topic: "Lake Leonida Airboat Narcotics Runways & Coast Guard Radars",
+    category: "Leonida",
+    tag: "Smuggling Routes",
+    readMins: "4 Min Feature",
+    summary: "Radar-evading low-altitude sea plane landings and mangrove drop-zones across Lake Leonida monitored by federal narcotics task forces.",
+    icon: "🛩️",
+  },
+  {
+    id: "lead-11",
+    topic: "Waning Sands Strip Mall Armored Car Cash-In-Transit Intercept",
+    category: "Story & Campaign",
+    tag: "Armed Robbery",
+    readMins: "4 Min Feature",
+    summary: "Precision thermite charges breached a Gruppe Sechs vault truck behind Waning Sands plaza; getaway vehicles abandoned in tidal flats.",
+    icon: "💰",
+  },
+  {
+    id: "lead-12",
+    topic: "RAGE 9 Volumetric Ocean Waves & Deep-Sea Water Simulation",
+    category: "Tech & RAGE",
+    tag: "Fluid Dynamics",
+    readMins: "5 Min Feature",
+    summary: "Tidal wave crest breaking, real-time buoyancy physics for offshore speedboats, and underwater caustic refraction across the Florida Straits.",
+    icon: "🌊",
+  },
+  {
+    id: "lead-13",
+    topic: "Little Haiti Voodoo Syndicate & Loan Shark Extortion Rings",
+    category: "Story & Campaign",
+    tag: "Syndicate Lore",
+    readMins: "5 Min Feature",
+    summary: "Protection rackets disguised as botanical shops operating with impunity; debt collection enforcement spreading into Little Havana.",
+    icon: "🕯️",
+  },
+  {
+    id: "lead-14",
+    topic: "Keys Smuggler Brian Heder: Offshore Safehouses & DEA Wiretaps",
+    category: "Story & Campaign",
+    tag: "Kingpin Dossier",
+    readMins: "6 Min Feature",
+    summary: "Former shrimping magnate turned kingpin coordinator; intercept transcripts expose direct financial ties to Jason Duval's dockside work.",
+    icon: "🛥️",
+  },
+  {
+    id: "lead-15",
+    topic: "Vice City Supercar Black Markets & Exotic VIN Cloners",
+    category: "Vehicles & Weapons",
+    tag: "Chop Shops",
+    readMins: "4 Min Feature",
+    summary: "Exotic hypercars stolen from Ocean Drive valets given forged overseas titles and loaded into shipping containers within forty-eight hours.",
+    icon: "🏎️",
+  },
+  {
+    id: "lead-16",
+    topic: "Hamlet Sugar Mill Boiler Explosions & Industrial Negligence",
+    category: "Leonida",
+    tag: "Rural Blight",
+    readMins: "4 Min Feature",
+    summary: "Catastrophic steam failure at an Ambrosia processing silo exposes falsified state safety certifications and corporate hush money.",
+    icon: "🏭",
+  },
+  {
+    id: "lead-17",
+    topic: "Vice City Police Department Body-Cam Audio & Radio Dispatch Protocols",
+    category: "Trailers & Media",
+    tag: "Police Blotter",
+    readMins: "4 Min Feature",
+    summary: "Leaked VCPD frequency dispatches detail tactical response tiers, suspect pursuit rules, and helicopter spotlight tracking routines.",
+    icon: "📻",
+  },
+  {
+    id: "lead-18",
+    topic: "Leonida Keys Coral Reef Degradation & Contraband Dump Sites",
+    category: "Leonida",
+    tag: "Environmental Lore",
+    readMins: "5 Min Feature",
+    summary: "Marine biologists discover underwater jettison crates contaminating coral formations along the southern archipelago shipping channels.",
+    icon: "🤿",
+  },
 ];
 
 interface ConsensusDialogue {
@@ -148,6 +256,11 @@ export default function AdminAiTeamTab({
   const [showKeyConfig, setShowKeyConfig] = useState<boolean>(false);
 
   // Dispatch Mode & Input
+  const [scoutedLeads, setScoutedLeads] = useState<IntelligenceLead[]>(MASTER_SCOUTED_LEADS.slice(0, 6));
+  const [poolOffset, setPoolOffset] = useState<number>(0);
+  const [isScouting, setIsScouting] = useState<boolean>(false);
+  const [dispatchedTopics, setDispatchedTopics] = useState<string[]>([]);
+
   const [selectedLeadId, setSelectedLeadId] = useState<string>("lead-1");
   const [customTopic, setCustomTopic] = useState<string>("");
   const [publishImmediately, setPublishImmediately] = useState<boolean>(true);
@@ -182,12 +295,25 @@ export default function AdminAiTeamTab({
 
   const showcaseRef = useRef<HTMLDivElement>(null);
 
-  // Load Groq API Key
+  // Load Groq API Key and Saved Scouted Leads
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("lv_groq_api_key");
-      if (saved) {
-        setGroqKey(saved);
+      const savedKey = localStorage.getItem("lv_groq_api_key");
+      if (savedKey) setGroqKey(savedKey);
+
+      const savedLeads = localStorage.getItem("lv_custom_scouted_leads");
+      if (savedLeads) {
+        const parsed = JSON.parse(savedLeads);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setScoutedLeads(parsed);
+          setSelectedLeadId(parsed[0].id);
+        }
+      }
+
+      const savedDispatched = localStorage.getItem("lv_dispatched_topics");
+      if (savedDispatched) {
+        const parsedD = JSON.parse(savedDispatched);
+        if (Array.isArray(parsedD)) setDispatchedTopics(parsedD);
       }
     } catch (_) {}
   }, []);
@@ -197,6 +323,55 @@ export default function AdminAiTeamTab({
     try {
       localStorage.setItem("lv_groq_api_key", newKey);
     } catch (_) {}
+  };
+
+  // Rotate through 18-lead master catalog
+  const handleRotateLeads = () => {
+    const nextOffset = (poolOffset + 6) % MASTER_SCOUTED_LEADS.length;
+    setPoolOffset(nextOffset);
+    const nextBatch = MASTER_SCOUTED_LEADS.slice(nextOffset, nextOffset + 6);
+    setScoutedLeads(nextBatch);
+    if (nextBatch.length > 0) {
+      setSelectedLeadId(nextBatch[0].id);
+    }
+  };
+
+  // AI Wire Recon: Generate 6 brand-new leads with Lexi Wire (Groq 20B)
+  const handleScoutFreshLeads = async () => {
+    if (isScouting) return;
+    setIsScouting(true);
+    try {
+      const res = await fetch("/api/admin/ai-team", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-groq-api-key": groqKey,
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          action: "scout_leads",
+          groqApiKey: groqKey,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.leads && Array.isArray(data.leads) && data.leads.length > 0) {
+          setScoutedLeads(data.leads);
+          setSelectedLeadId(data.leads[0].id);
+          try {
+            localStorage.setItem("lv_custom_scouted_leads", JSON.stringify(data.leads));
+          } catch (_) {}
+        } else {
+          handleRotateLeads();
+        }
+      } else {
+        handleRotateLeads();
+      }
+    } catch (_) {
+      handleRotateLeads();
+    } finally {
+      setIsScouting(false);
+    }
   };
 
   // Fetch recent articles for the history drawer
@@ -229,9 +404,17 @@ export default function AdminAiTeamTab({
     // Determine target topic
     let targetTopic = customTopic.trim();
     if (!targetTopic) {
-      const lead = leadOverride || SCOUTED_LEADS.find((l) => l.id === selectedLeadId) || SCOUTED_LEADS[0];
+      const lead = leadOverride || scoutedLeads.find((l) => l.id === selectedLeadId) || scoutedLeads[0];
       targetTopic = lead.topic;
     }
+
+    setDispatchedTopics((prev) => {
+      const next = Array.from(new Set([...prev, targetTopic]));
+      try {
+        localStorage.setItem("lv_dispatched_topics", JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
 
     setIsSpinningUp(true);
     setActiveStep(1);
@@ -542,21 +725,51 @@ export default function AdminAiTeamTab({
 
           {/* Scouted Intelligence Leads Carousel ("Select a Lead or Hit Spin Up") */}
           <div className="mt-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm">🎯</span>
                 <h3 className="text-xs font-mono uppercase tracking-wider text-slate-300 font-bold">
                   Pre-Scouted Intelligence Leads (Click to Target)
                 </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1e293b] text-[#38bdf8] border border-[#38bdf8]/30">
+                  {scoutedLeads.length} Active
+                </span>
               </div>
-              <span className="text-[11px] font-mono text-slate-400">
-                Or leave default & click "⚡ Spin Up New Article"
-              </span>
+
+              {/* Dynamic Recon Actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRotateLeads}
+                  disabled={isScouting || isSpinningUp}
+                  className="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-slate-300 text-[11px] font-mono transition-colors flex items-center gap-1 border border-slate-700"
+                >
+                  <span>🔀 Rotate Next 6</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleScoutFreshLeads}
+                  disabled={isScouting || isSpinningUp}
+                  className="px-2.5 py-1 rounded bg-[#0f766e] hover:bg-[#115e59] text-white text-[11px] font-mono font-bold transition-colors flex items-center gap-1.5 shadow"
+                >
+                  {isScouting ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Lexi Intercepting Wire...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🔄 Scout Fresh Leads (AI Recon)</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {SCOUTED_LEADS.map((lead) => {
+              {scoutedLeads.map((lead) => {
                 const isSelected = selectedLeadId === lead.id && !customTopic.trim();
+                const isDispatched = dispatchedTopics.includes(lead.topic);
                 return (
                   <div
                     key={lead.id}
@@ -573,6 +786,11 @@ export default function AdminAiTeamTab({
                     <div className="flex items-start justify-between gap-2 mb-1.5">
                       <span className="text-lg">{lead.icon}</span>
                       <div className="flex items-center gap-1.5">
+                        {isDispatched && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-700/60 font-bold">
+                            ✓ Dispatched
+                          </span>
+                        )}
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#21262d] text-slate-300 border border-slate-700">
                           {lead.tag}
                         </span>
