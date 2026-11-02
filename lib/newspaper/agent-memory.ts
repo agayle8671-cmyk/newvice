@@ -9,7 +9,7 @@ export interface KnowledgeMemoryChunk {
   domain_pillar: string;
   section_title: string;
   content: string;
-  agent_scope: string;
+  agent_scope: string | string[];
   entity_tags: string[];
   importance_weight: number;
   embedding?: number[];
@@ -73,8 +73,27 @@ export function recallAgentMemories(
     let score = 0;
 
     // Agent Scope Affinity: boost matching agent or SOP
-    const scope = (chunk.agent_scope || "all").toLowerCase();
-    if (scope === "all" || scope.includes(agentId.toLowerCase())) {
+    const rawScope = chunk.agent_scope;
+    const scopeList: string[] = Array.isArray(rawScope)
+      ? rawScope.map((s) => String(s).toLowerCase())
+      : typeof rawScope === "string"
+      ? [rawScope.toLowerCase()]
+      : ["all"];
+
+    const targetAgent = (agentId || "").toLowerCase();
+    const isScopeMatch =
+      scopeList.includes("all") ||
+      scopeList.some(
+        (s) =>
+          s.includes(targetAgent) ||
+          targetAgent.includes(s) ||
+          (targetAgent === "chief" && s.includes("vance")) ||
+          (targetAgent === "wire" && s.includes("lexi")) ||
+          (targetAgent === "cruz" && s.includes("safeguard")) ||
+          (targetAgent === "sentinel" && s.includes("watchdog"))
+      );
+
+    if (isScopeMatch) {
       score += 2.0;
     }
 
@@ -105,7 +124,7 @@ export function recallAgentMemories(
     }
 
     // SOP priority boost
-    if (chunk.memory_tier === "procedural_sop" && scope.includes(agentId.toLowerCase())) {
+    if (chunk.memory_tier === "procedural_sop" && isScopeMatch) {
       score += 3.5;
     }
 
