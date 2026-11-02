@@ -286,6 +286,7 @@ export default function AdminAiTeamTab({
 
   // Current Generated Article State
   const [currentArticle, setCurrentArticle] = useState<Article | null>(null);
+  const [heroImagePool, setHeroImagePool] = useState<string[]>([]);
   const [publishedLiveUrl, setPublishedLiveUrl] = useState<string | null>(null);
   const [isPublishingDraft, setIsPublishingDraft] = useState<boolean>(false);
 
@@ -482,6 +483,10 @@ export default function AdminAiTeamTab({
         setDialogues(data.consensusDialogues);
       }
 
+      if (data.heroImagePool && Array.isArray(data.heroImagePool)) {
+        setHeroImagePool(data.heroImagePool);
+      }
+
       if (data.article) {
         setCurrentArticle(data.article);
         if (data.article.status === "published") {
@@ -544,6 +549,47 @@ export default function AdminAiTeamTab({
     } finally {
       setIsPublishingDraft(false);
     }
+  };
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 🖼️ 1-CLICK SWAP HERO ASSET (DYNAMIC ASSET ROTATION)
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleSwapHeroImage = async () => {
+    if (!currentArticle) return;
+    const pool = heroImagePool.length > 0 ? heroImagePool : [
+      "/images/gta/ultimate_edition_squalo_01.jpg",
+      "/images/gta/mount_kalaga_national_park_01.jpg",
+      "/images/gta/ambrosia_01.jpg",
+      "/images/gta/port_gellhorn_01.jpg",
+      "/images/gta/grassrivers_01.jpg",
+      "/images/gta/jason_lucia_lock_and_load_tablet.jpg",
+      "/images/gta/ultimate_edition_grotti_cheetah_01.jpg",
+      "/images/gta/vice_city_01.jpg",
+      "/images/gta/vice_city_04.jpg",
+    ];
+
+    const currentIndex = pool.indexOf(currentArticle.image);
+    const nextIndex = (currentIndex + 1) % pool.length;
+    const nextImg = pool[nextIndex];
+
+    const updated = {
+      ...currentArticle,
+      image: nextImg,
+    };
+    setCurrentArticle(updated);
+
+    // Sync updated hero image in background if already saved
+    try {
+      await fetch("/api/admin/articles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify(updated),
+      });
+      fetchRecentArticles();
+    } catch (_) {}
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1074,9 +1120,21 @@ export default function AdminAiTeamTab({
                     alt={currentArticle.title}
                     className="w-full max-h-[460px] object-cover"
                   />
-                  <div className="p-2.5 bg-[#f3efe6] text-[11px] font-mono text-slate-600 border-t border-slate-300 flex items-center justify-between">
-                    <span>Forensic surveillance asset verified by Sentinel-9 Media Watchdog.</span>
-                    <span className="uppercase font-bold text-slate-500">State of Leonida Public Records</span>
+                  <div className="p-3 bg-[#f3efe6] text-[11px] font-mono text-slate-700 border-t border-slate-300 flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-black font-mono">
+                        Asset: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-300">{currentArticle.image.split("/").pop()}</code>
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span>Verified by Sentinel-9 Media Watchdog</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSwapHeroImage}
+                      className="px-3 py-1.5 rounded bg-black hover:bg-slate-800 text-white font-mono text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                    >
+                      <span>🖼️ Swap Hero Asset ↻</span>
+                    </button>
                   </div>
                 </div>
               )}
